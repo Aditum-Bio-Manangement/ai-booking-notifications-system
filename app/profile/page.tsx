@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,7 @@ import {
 import Link from "next/link"
 import { format } from "date-fns"
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const { user, updateProfile, refreshUser, isLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -465,5 +465,18 @@ export default function ProfilePage() {
         </Tabs>
       </main>
     </div>
+  )
+}
+
+// Wrapper component with Suspense boundary for useSearchParams
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground">Loading profile...</div>
+      </div>
+    }>
+      <ProfilePageContent />
+    </Suspense>
   )
 }
