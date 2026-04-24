@@ -1,28 +1,32 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getUserProfileWithPhoto } from "@/lib/microsoft-graph"
+import { getUserProfile } from "@/lib/microsoft-graph"
 import { createClient } from "@/lib/supabase/server"
 
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json()
-    
+
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 })
     }
 
-    // Fetch profile from Microsoft Graph
-    const graphProfile = await getUserProfileWithPhoto(email)
+    // Fetch profile from Microsoft Graph (without photo to avoid large payloads)
+    const graphProfile = await getUserProfile(email)
+
+    // Use API endpoint for photo instead of storing base64 data
+    // This prevents cookies from becoming too large (431 error)
+    const photoUrl = `/api/profile/photo?email=${encodeURIComponent(email)}`
 
     // If Supabase is configured, update the profile in the database
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    
+
     if (supabaseUrl && supabaseKey) {
       const supabase = await createClient()
-      
+
       // Get current session to get user ID
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       if (session?.user) {
         await supabase
           .from("profiles")
@@ -33,7 +37,7 @@ export async function POST(request: NextRequest) {
             department: graphProfile.department || null,
             title: graphProfile.jobTitle || null,
             phone: graphProfile.mobilePhone || graphProfile.businessPhones?.[0] || null,
-            avatar_url: graphProfile.photoUrl || null,
+            avatar_url: photoUrl,
             microsoft_id: graphProfile.id,
             updated_at: new Date().toISOString(),
           }, {
@@ -51,7 +55,7 @@ export async function POST(request: NextRequest) {
         department: graphProfile.department || "",
         title: graphProfile.jobTitle || "",
         phone: graphProfile.mobilePhone || graphProfile.businessPhones?.[0] || "",
-        avatarUrl: graphProfile.photoUrl || "",
+        avatarUrl: photoUrl,
         officeLocation: graphProfile.officeLocation || "",
       }
     })

@@ -378,16 +378,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = async () => {
-    if (supabaseConfigured) {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY)
+    try {
+      // Clear state first
+      setUser(null)
+      setSupabaseUser(null)
+      setSession(null)
+
+      if (supabaseConfigured) {
+        // Use server-side logout API to properly clear cookies
+        // This handles the 431 error case where cookies are too large
+        await fetch("/api/auth/logout", { method: "POST" })
+
+        // Also try client-side signOut
+        try {
+          const supabase = createClient()
+          await supabase.auth.signOut()
+        } catch (e) {
+          console.error("Client signOut error (continuing):", e)
+        }
+      } else {
+        localStorage.removeItem(AUTH_STORAGE_KEY)
+      }
+
+      // Navigate to login
+      router.push("/login")
+    } catch (error) {
+      console.error("Logout error:", error)
+      // Force navigate to login even on error
+      router.push("/login")
     }
-    setUser(null)
-    setSupabaseUser(null)
-    setSession(null)
-    router.push("/login")
   }
 
   const updateProfile = async (updates: Partial<User>) => {
