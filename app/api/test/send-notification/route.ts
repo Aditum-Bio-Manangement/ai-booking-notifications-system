@@ -86,10 +86,10 @@ export async function GET() {
         exampleRequest: {
             method: "POST",
             body: {
-                toEmail: "your-email@example.com",
-                roomName: "Conference Room A",
+                toEmail: "caleb.klobe@aditumbio.com.com",
+                roomName: "Longfellow Room - Cambridge",
                 subject: "Test Meeting",
-                organizerName: "John Doe"
+                organizerName: "Caleb Klobe"
             }
         }
     })
