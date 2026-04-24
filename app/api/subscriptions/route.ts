@@ -16,7 +16,11 @@ let mockSubscriptions: Array<{
 }> = []
 
 const isGraphConfigured = () => {
-  return !!(process.env.AZURE_CLIENT_ID && process.env.AZURE_CLIENT_SECRET && process.env.AZURE_TENANT_ID)
+  // Check both naming conventions for Azure AD credentials
+  const clientId = process.env.AZURE_AD_CLIENT_ID || process.env.AZURE_CLIENT_ID
+  const clientSecret = process.env.AZURE_AD_CLIENT_SECRET || process.env.AZURE_CLIENT_SECRET
+  const tenantId = process.env.AZURE_AD_TENANT_ID || process.env.AZURE_TENANT_ID
+  return !!(clientId && clientSecret && tenantId)
 }
 
 export async function GET() {
@@ -28,16 +32,16 @@ export async function GET() {
         ...sub,
         status: new Date(sub.expiresAt) > new Date() ? "active" : "expired",
       }))
-      
-      return NextResponse.json({ 
-        subscriptions: mockSubscriptions, 
+
+      return NextResponse.json({
+        subscriptions: mockSubscriptions,
         configured: false,
         message: "Running in demo mode - subscriptions are stored locally"
       })
     }
 
     const subscriptions = await listSubscriptions()
-    
+
     // Transform to our format
     const transformedSubs = subscriptions.map((sub) => ({
       id: sub.id,
@@ -80,9 +84,9 @@ export async function POST(request: NextRequest) {
         expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days from now
         status: "active" as const,
       }
-      
+
       mockSubscriptions.push(mockSub)
-      
+
       return NextResponse.json({
         subscription: mockSub,
         message: "Demo subscription created (no actual Graph webhook)"
@@ -91,21 +95,33 @@ export async function POST(request: NextRequest) {
 
     // Use environment variable for notification URL or provided one
     const webhookUrl = notificationUrl || process.env.WEBHOOK_URL || `${process.env.VERCEL_URL || "http://localhost:3000"}/api/webhooks/graph`
-    
+
+    console.log(`[SUBSCRIPTION] Creating subscription for room: ${roomEmail}`)
+    console.log(`[SUBSCRIPTION] Webhook URL: ${webhookUrl}`)
+
     // Generate a client state for validation
     const clientState = crypto.randomUUID()
 
-    const subscription = await createSubscription(roomEmail, webhookUrl, clientState)
+    try {
+      const subscription = await createSubscription(roomEmail, webhookUrl, clientState)
 
-    return NextResponse.json({
-      subscription: {
-        id: subscription.id,
-        roomEmail,
-        resource: subscription.resource,
-        expiresAt: subscription.expirationDateTime,
-        clientState,
-      },
-    })
+      console.log(`[SUBSCRIPTION] Successfully created subscription: ${subscription.id}`)
+      console.log(`[SUBSCRIPTION] Expires at: ${subscription.expirationDateTime}`)
+
+      return NextResponse.json({
+        subscription: {
+          id: subscription.id,
+          roomEmail,
+          resource: subscription.resource,
+          expiresAt: subscription.expirationDateTime,
+          clientState,
+          notificationUrl: webhookUrl,
+        },
+      })
+    } catch (subError) {
+      console.error(`[SUBSCRIPTION] Failed to create subscription:`, subError)
+      throw subError
+    }
   } catch (error) {
     console.error("Error creating subscription:", error)
     return NextResponse.json(
@@ -133,13 +149,13 @@ export async function PATCH(request: NextRequest) {
       if (subIndex === -1) {
         return NextResponse.json({ error: "Subscription not found" }, { status: 404 })
       }
-      
+
       mockSubscriptions[subIndex] = {
         ...mockSubscriptions[subIndex],
         expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
         status: "active",
       }
-      
+
       return NextResponse.json({
         subscription: mockSubscriptions[subIndex],
         message: "Demo subscription renewed"
@@ -181,9 +197,9 @@ export async function DELETE(request: NextRequest) {
       if (subIndex === -1) {
         return NextResponse.json({ error: "Subscription not found" }, { status: 404 })
       }
-      
+
       mockSubscriptions.splice(subIndex, 1)
-      
+
       return NextResponse.json({ success: true, message: "Demo subscription deleted" })
     }
 
