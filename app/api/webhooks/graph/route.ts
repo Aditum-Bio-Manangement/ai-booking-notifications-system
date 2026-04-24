@@ -32,10 +32,13 @@ interface GraphNotification {
 }
 
 export async function POST(request: NextRequest) {
+  console.log("[WEBHOOK] POST request received at", new Date().toISOString())
+
   try {
     // Handle validation request from Microsoft Graph
     const validationToken = request.nextUrl.searchParams.get("validationToken")
     if (validationToken) {
+      console.log("[WEBHOOK] Validation request received, responding with token")
       return new NextResponse(validationToken, {
         status: 200,
         headers: { "Content-Type": "text/plain" },
@@ -43,23 +46,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    console.log("[WEBHOOK] Received body:", JSON.stringify(body, null, 2))
+
     const notifications: GraphNotification[] = body.value || []
+    console.log(`[WEBHOOK] Processing ${notifications.length} notification(s)`)
 
     // Process each notification asynchronously
     // Respond quickly to Microsoft Graph (they expect < 3 seconds)
     const processPromises = notifications.map(async (notification) => {
       // Create idempotency key
       const idempotencyKey = `${notification.subscriptionId}-${notification.resourceData.id}-${notification.changeType}`
-      
+
       // Check if already processed
       if (processedEvents.has(idempotencyKey)) {
         console.log(`Skipping duplicate notification: ${idempotencyKey}`)
         return
       }
-      
+
       // Mark as processed
       processedEvents.set(idempotencyKey, Date.now())
-      
+
       // Clean up periodically
       if (processedEvents.size > 1000) {
         cleanupProcessedEvents()
@@ -87,29 +93,32 @@ export async function POST(request: NextRequest) {
 }
 
 async function processNotification(notification: GraphNotification) {
+  console.log("[WEBHOOK] Processing notification:", JSON.stringify(notification, null, 2))
+
   // Extract room email from resource path
   // Format: /users/{email}/events/{eventId}
   const resourceMatch = notification.resource.match(/\/users\/([^/]+)\/events\/([^/]+)/)
   if (!resourceMatch) {
-    console.error("Could not parse resource path:", notification.resource)
+    console.error("[WEBHOOK] Could not parse resource path:", notification.resource)
     return
   }
 
   const [, roomEmail, eventId] = resourceMatch
+  console.log(`[WEBHOOK] Room: ${roomEmail}, Event: ${eventId}, ChangeType: ${notification.changeType}`)
 
   // Skip deleted events
   if (notification.changeType === "deleted") {
-    console.log(`Event deleted: ${eventId} in room ${roomEmail}`)
+    console.log(`[WEBHOOK] Event deleted: ${eventId} in room ${roomEmail}, skipping`)
     return
   }
 
   // Check if custom notifications are enabled
   // Default to ENABLED if no settings exist (so notifications work out of the box)
   let customNotificationsEnabled = true
-  
+
   try {
     const supabase = await createClient()
-    
+
     // First check room-specific settings
     const { data: roomSettings } = await supabase
       .from("room_notification_settings")
@@ -167,7 +176,9 @@ async function processNotification(notification: GraphNotification) {
   console.log(`[v0] Checking response status: ${event.responseStatus?.response}`)
 
   if (event.responseStatus?.response === "accepted") {
-    console.log(`[v0] Event accepted - sending acceptance notification`)
+    console.log(`[WEBHOOK] Event ACCEPTED - preparing acceptance notification`)
+    console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
+
     // Send acceptance notification
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
@@ -179,18 +190,22 @@ async function processNotification(notification: GraphNotification) {
     })
 
     try {
+      console.log(`[WEBHOOK] Calling sendEmail via Graph API...`)
       await sendEmail(
         notificationMailbox,
         organizerEmail,
         `Room Confirmed: ${roomName} - ${event.subject}`,
         htmlContent
       )
-      console.log(`[v0] Successfully sent acceptance email for event ${eventId} to ${organizerEmail}`)
+      console.log(`[WEBHOOK] SUCCESS: Sent acceptance email for event ${eventId} to ${organizerEmail}`)
     } catch (emailError) {
-      console.error(`[v0] Failed to send acceptance email:`, emailError)
+      console.error(`[WEBHOOK] FAILED to send acceptance email:`, emailError)
+      console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
     }
   } else if (event.responseStatus?.response === "declined") {
-    console.log(`[v0] Event declined - sending decline notification`)
+    console.log(`[WEBHOOK] Event DECLINED - preparing decline notification`)
+    console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
+
     // Send decline notification
     const htmlContent = renderDeclinedEmail({
       organizerName: event.organizer.emailAddress.name,
@@ -203,26 +218,39 @@ async function processNotification(notification: GraphNotification) {
     })
 
     try {
+      console.log(`[WEBHOOK] Calling sendEmail via Graph API...`)
       await sendEmail(
         notificationMailbox,
         organizerEmail,
         `Room Unavailable: ${roomName} - ${event.subject}`,
         htmlContent
       )
-      console.log(`[v0] Successfully sent decline email for event ${eventId} to ${organizerEmail}`)
+      console.log(`[WEBHOOK] SUCCESS: Sent decline email for event ${eventId} to ${organizerEmail}`)
     } catch (emailError) {
-      console.error(`[v0] Failed to send decline email:`, emailError)
+      console.error(`[WEBHOOK] FAILED to send decline email:`, emailError)
+      console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
     }
   } else {
-    console.log(`[v0] Event response status not accepted/declined: ${event.responseStatus?.response}`)
+    console.log(`[WEBHOOK] Event response status is "${event.responseStatus?.response}" - not accepted/declined, skipping email`)
   }
 }
 
-// GET endpoint for health checks
+// GET endpoint for health checks and diagnostics
 export async function GET() {
+  const notificationMailbox = process.env.NOTIFICATION_MAILBOX
+  const webhookUrl = process.env.WEBHOOK_URL
+
   return NextResponse.json({
     status: "healthy",
     timestamp: new Date().toISOString(),
     processedEventsCount: processedEvents.size,
+    diagnostics: {
+      notificationMailbox: notificationMailbox ? `configured (${notificationMailbox})` : "NOT CONFIGURED - emails will not send",
+      webhookUrl: webhookUrl ? `configured (${webhookUrl})` : "NOT CONFIGURED",
+      azureClientId: process.env.AZURE_AD_CLIENT_ID ? "configured" : "NOT CONFIGURED",
+      azureClientSecret: process.env.AZURE_AD_CLIENT_SECRET ? "configured" : "NOT CONFIGURED",
+      azureTenantId: process.env.AZURE_AD_TENANT_ID ? "configured" : "NOT CONFIGURED",
+    },
+    hint: "POST to this endpoint to receive webhook notifications from Microsoft Graph",
   })
 }

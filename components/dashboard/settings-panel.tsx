@@ -717,20 +717,48 @@ export function SettingsPanel() {
                   )}
 
                   {settings.notifications.suppressExchangeNotifications && (
-                    <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">
-                        PowerShell Required for Full Suppression
-                      </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
-                        The Graph API can disable automatic replies, but to fully suppress Exchange&apos;s built-in
-                        accept/decline emails, run this PowerShell command in Exchange Online:
-                      </p>
-                      <code className="block p-2 bg-amber-100 dark:bg-amber-900/50 rounded text-xs font-mono text-amber-900 dark:text-amber-100 overflow-x-auto">
-                        Get-Mailbox -RecipientTypeDetails RoomMailbox | Set-CalendarProcessing -AddAdditionalResponse $false -DeleteComments $true
-                      </code>
-                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                        This command will apply to all room mailboxes in your tenant.
-                      </p>
+                    <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">
+                          PowerShell Required for Full Suppression
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
+                          The Graph API cannot suppress Exchange&apos;s calendar accept/decline emails.
+                          You must run these PowerShell commands in Exchange Online PowerShell to fully suppress them:
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">
+                          Step 1: Connect to Exchange Online
+                        </p>
+                        <code className="block p-2 bg-amber-100 dark:bg-amber-900/50 rounded text-xs font-mono text-amber-900 dark:text-amber-100 overflow-x-auto">
+                          Connect-ExchangeOnline -UserPrincipalName admin@yourdomain.com
+                        </code>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">
+                          Step 2: Suppress accept/decline emails for all room mailboxes
+                        </p>
+                        <code className="block p-2 bg-amber-100 dark:bg-amber-900/50 rounded text-xs font-mono text-amber-900 dark:text-amber-100 overflow-x-auto whitespace-pre-wrap">
+                          {`Get-Mailbox -RecipientTypeDetails RoomMailbox | ForEach-Object {
+  Set-CalendarProcessing -Identity $_.Identity -AddAdditionalResponse $false -DeleteComments $true -AddOrganizerToSubject $false -DeleteSubject $false
+}`}
+                        </code>
+                      </div>
+
+                      <div className="pt-2 border-t border-amber-200 dark:border-amber-700">
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">
+                          Important Note
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                          Exchange will still send a basic calendar acceptance/decline notification as this is built into
+                          the calendar processing system. The commands above minimize the email content. To completely
+                          eliminate duplicate emails, organizers can create an Outlook rule to auto-delete emails from
+                          room mailboxes, or you can set rooms to not auto-process: <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">Set-CalendarProcessing -AutomateProcessing None</code> (but then rooms won&apos;t auto-accept bookings).
+                        </p>
+                      </div>
                     </div>
                   )}
 
