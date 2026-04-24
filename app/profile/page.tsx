@@ -29,16 +29,16 @@ import Link from "next/link"
 import { format } from "date-fns"
 
 export default function ProfilePage() {
-  const { user, updateProfile, isLoading } = useAuth()
+  const { user, updateProfile, refreshUser, isLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  
+
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "profile")
   const [isSaving, setIsSaving] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle")
-  
+
   // Form state
   const [formData, setFormData] = useState({
     name: "",
@@ -65,7 +65,7 @@ export default function ProfilePage() {
 
   const userInitials = formData.name && formData.name !== "User"
     ? formData.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : user?.email 
+    : user?.email
       ? user.email.split("@")[0].slice(0, 2).toUpperCase()
       : "U"
 
@@ -92,40 +92,47 @@ export default function ProfilePage() {
 
   const handleSyncFromM365 = async () => {
     if (!user?.email) return
-    
+
     setIsSyncing(true)
+    setSaveStatus("idle")
+
     try {
       const response = await fetch("/api/profile/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: user.email }),
       })
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (data.profile) {
-          setFormData({
-            name: data.profile.name || formData.name,
-            email: data.profile.email || formData.email,
-            department: data.profile.department || formData.department,
-            title: data.profile.title || formData.title,
-            phone: data.profile.phone || formData.phone,
-            avatarUrl: data.profile.avatarUrl || formData.avatarUrl,
-          })
-          // Also update the auth context
-          await updateProfile({
-            name: data.profile.name,
-            department: data.profile.department,
-            title: data.profile.title,
-            phone: data.profile.phone,
-            avatarUrl: data.profile.avatarUrl,
-          })
-          setSaveStatus("success")
-          setTimeout(() => setSaveStatus("idle"), 3000)
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        console.error("Sync failed:", data.error)
+        setSaveStatus("error")
+        return
+      }
+
+      if (data.profile) {
+        // Update local form data with synced values
+        const newFormData = {
+          name: data.profile.name || formData.name,
+          email: data.profile.email || formData.email,
+          department: data.profile.department || formData.department,
+          title: data.profile.title || formData.title,
+          phone: data.profile.phone || formData.phone,
+          avatarUrl: data.profile.avatarUrl || formData.avatarUrl,
         }
+        setFormData(newFormData)
+
+        // Refresh the user context to get updated data
+        // Note: The API already saved to Supabase, so we just need to refresh
+        await refreshUser()
+
+        setSaveStatus("success")
+        setTimeout(() => setSaveStatus("idle"), 3000)
       }
     } catch (error) {
       console.error("Failed to sync from M365:", error)
+      setSaveStatus("error")
     } finally {
       setIsSyncing(false)
     }
@@ -181,9 +188,9 @@ export default function ProfilePage() {
                 Saved
               </Badge>
             )}
-            <Button 
-              variant="outline" 
-              onClick={handleSyncFromM365} 
+            <Button
+              variant="outline"
+              onClick={handleSyncFromM365}
               disabled={isSyncing}
               className="gap-2"
             >

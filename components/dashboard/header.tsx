@@ -344,7 +344,13 @@ export function DashboardHeader({ onSettingsClick, onMenuToggle, bookings = [] }
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="gap-2 text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              onClick={async (e) => {
+                e.preventDefault()
+                await logout()
+              }}
+              className="gap-2 text-destructive focus:text-destructive cursor-pointer"
+            >
               <LogOut className="h-4 w-4" />
               Sign Out
             </DropdownMenuItem>

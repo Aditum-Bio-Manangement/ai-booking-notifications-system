@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const { login, loginWithMicrosoft, isSupabaseConfigured } = useAuth()
+  const { login, loginWithMicrosoft } = useAuth()
   const router = useRouter()
   const [isMicrosoftLoading, setIsMicrosoftLoading] = useState(false)
 
@@ -124,62 +124,46 @@ export default function LoginPage() {
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
 
-              {isSupabaseConfigured && (
-                <>
-                  <div className="relative my-4">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
-                    </div>
-                  </div>
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+                </div>
+              </div>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full gap-2"
-                    disabled={isMicrosoftLoading}
-                    onClick={async () => {
-                      setIsMicrosoftLoading(true)
-                      setError("")
-                      try {
-                        const result = await loginWithMicrosoft()
-                        if (!result.success) {
-                          setError(result.error || "Microsoft login failed")
-                        }
-                      } catch {
-                        setError("Failed to initiate Microsoft login")
-                      } finally {
-                        setIsMicrosoftLoading(false)
-                      }
-                    }}
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                      <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                      <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                      <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                    </svg>
-                    {isMicrosoftLoading ? "Redirecting..." : "Sign in with Microsoft"}
-                  </Button>
-                </>
-              )}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                disabled={isMicrosoftLoading}
+                onClick={async () => {
+                  setIsMicrosoftLoading(true)
+                  setError("")
+                  try {
+                    const result = await loginWithMicrosoft()
+                    if (!result.success) {
+                      setError(result.error || "Microsoft login failed")
+                    }
+                  } catch {
+                    setError("Failed to initiate Microsoft login")
+                  } finally {
+                    setIsMicrosoftLoading(false)
+                  }
+                }}
+              >
+                <svg className="h-4 w-4" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+                  <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+                  <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+                  <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+                </svg>
+                {isMicrosoftLoading ? "Redirecting..." : "Sign in with Microsoft"}
+              </Button>
             </form>
 
-            <div className="mt-6 rounded-lg border border-muted bg-muted/30 p-4">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">Demo Credentials</p>
-              <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                <p>
-                  <span className="font-medium text-foreground">Admin:</span>{" "}
-                  admin@aditumbio.com / admin123
-                </p>
-                <p>
-                  <span className="font-medium text-foreground">Operator:</span>{" "}
-                  operator@aditumbio.com / operator123
-                </p>
-              </div>
-            </div>
+
           </CardContent>
         </Card>
 

@@ -29,6 +29,7 @@ interface AuthContextType {
   loginWithMicrosoft: () => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   updateProfile: (updates: Partial<User>) => Promise<void>
+  refreshUser: () => Promise<void>
   signUp: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>
 }
 
@@ -78,8 +79,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
-  
+
   const supabaseConfigured = isSupabaseConfigured()
+
+  // Function to fetch/refresh user profile from Supabase
+  const fetchUserProfile = async () => {
+    if (!supabaseConfigured) return
+
+    try {
+      const supabase = createClient()
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+
+      if (!currentSession?.user) return
+
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentSession.user.id)
+        .single()
+
+      if (error) {
+        console.error("Error fetching profile:", error)
+        return
+      }
+
+      if (profile) {
+        const displayName = profile.name ||
+          currentSession.user.user_metadata?.name ||
+          currentSession.user.user_metadata?.full_name ||
+          currentSession.user.email?.split("@")[0] ||
+          "User"
+
+        setUser({
+          id: profile.id,
+          email: profile.email || currentSession.user.email || "",
+          name: displayName,
+          role: profile.role || "viewer",
+          avatarUrl: profile.avatar_url,
+          department: profile.department,
+          title: profile.title,
+          phone: profile.phone,
+          createdAt: profile.created_at,
+          lastLogin: profile.last_login || new Date().toISOString(),
+        })
+      }
+    } catch (error) {
+      console.error("Error in fetchUserProfile:", error)
+    }
+  }
 
   // Initialize demo users in localStorage if not using Supabase
   useEffect(() => {
@@ -99,26 +146,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Use Supabase auth
           const supabase = createClient()
           const { data: { session: currentSession } } = await supabase.auth.getSession()
-          
+
           if (currentSession?.user) {
             setSession(currentSession)
             setSupabaseUser(currentSession.user)
-            
+
             // Get profile from database
             const { data: profile } = await supabase
               .from("profiles")
               .select("*")
               .eq("id", currentSession.user.id)
               .single()
-            
+
             if (profile) {
               // Use profile name, or user metadata name, or extract from email
-              const displayName = profile.name || 
-                currentSession.user.user_metadata?.name || 
+              const displayName = profile.name ||
+                currentSession.user.user_metadata?.name ||
                 currentSession.user.user_metadata?.full_name ||
-                currentSession.user.email?.split("@")[0] || 
+                currentSession.user.email?.split("@")[0] ||
                 "User"
-              
+
               setUser({
                 id: profile.id,
                 email: profile.email || currentSession.user.email || "",
@@ -133,11 +180,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               })
             } else {
               // Create basic user from Supabase user
-              const displayName = currentSession.user.user_metadata?.name || 
+              const displayName = currentSession.user.user_metadata?.name ||
                 currentSession.user.user_metadata?.full_name ||
-                currentSession.user.email?.split("@")[0] || 
+                currentSession.user.email?.split("@")[0] ||
                 "User"
-              
+
               setUser({
                 id: currentSession.user.id,
                 email: currentSession.user.email || "",
@@ -148,13 +195,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               })
             }
           }
-          
+
           // Listen for auth changes
           const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, newSession) => {
               setSession(newSession)
               setSupabaseUser(newSession?.user || null)
-              
+
               if (event === "SIGNED_OUT") {
                 setUser(null)
               } else if (newSession?.user) {
@@ -164,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   .select("*")
                   .eq("id", newSession.user.id)
                   .single()
-                
+
                 if (profile) {
                   setUser({
                     id: profile.id,
@@ -182,7 +229,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             }
           )
-          
+
           return () => {
             subscription.unsubscribe()
           }
@@ -392,6 +439,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginWithMicrosoft,
         logout,
         updateProfile,
+        refreshUser: fetchUserProfile,
         signUp,
       }}
     >
