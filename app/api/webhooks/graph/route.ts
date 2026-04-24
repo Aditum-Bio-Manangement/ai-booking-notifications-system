@@ -247,9 +247,9 @@ export async function GET() {
     diagnostics: {
       notificationMailbox: notificationMailbox ? `configured (${notificationMailbox})` : "NOT CONFIGURED - emails will not send",
       webhookUrl: webhookUrl ? `configured (${webhookUrl})` : "NOT CONFIGURED",
-      azureClientId: process.env.AZURE_AD_CLIENT_ID ? "configured" : "NOT CONFIGURED",
-      azureClientSecret: process.env.AZURE_AD_CLIENT_SECRET ? "configured" : "NOT CONFIGURED",
-      azureTenantId: process.env.AZURE_AD_TENANT_ID ? "configured" : "NOT CONFIGURED",
+      azureClientId: process.env.AZURE_CLIENT_ID ? "configured" : "NOT CONFIGURED",
+      azureClientSecret: process.env.AZURE_CLIENT_SECRET ? "configured" : "NOT CONFIGURED",
+      azureTenantId: process.env.AZURE_TENANT_ID ? "configured" : "NOT CONFIGURED",
     },
     hint: "POST to this endpoint to receive webhook notifications from Microsoft Graph",
   })

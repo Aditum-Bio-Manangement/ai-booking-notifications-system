@@ -79,9 +79,9 @@ export async function GET() {
         description: "Test endpoint to verify email sending via Microsoft Graph",
         configuration: {
             notificationMailbox: notificationMailbox || "NOT CONFIGURED",
-            azureClientId: process.env.AZURE_AD_CLIENT_ID ? "configured" : "NOT CONFIGURED",
-            azureClientSecret: process.env.AZURE_AD_CLIENT_SECRET ? "configured" : "NOT CONFIGURED",
-            azureTenantId: process.env.AZURE_AD_TENANT_ID ? "configured" : "NOT CONFIGURED",
+            azureClientId: process.env.AZURE_CLIENT_ID ? "configured" : "NOT CONFIGURED",
+            azureClientSecret: process.env.AZURE_CLIENT_SECRET ? "configured" : "NOT CONFIGURED",
+            azureTenantId: process.env.AZURE_TENANT_ID ? "configured" : "NOT CONFIGURED",
         },
         exampleRequest: {
             method: "POST",
