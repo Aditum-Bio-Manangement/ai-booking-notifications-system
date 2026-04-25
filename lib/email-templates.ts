@@ -244,20 +244,75 @@ export interface EmailTemplateData {
   logoUrl?: string
 }
 
+// Map common Microsoft timezone IDs to IANA timezone names
+const timezoneMap: Record<string, string> = {
+  "Eastern Standard Time": "America/New_York",
+  "Pacific Standard Time": "America/Los_Angeles",
+  "Central Standard Time": "America/Chicago",
+  "Mountain Standard Time": "America/Denver",
+  "UTC": "UTC",
+  "GMT": "UTC",
+}
+
 function formatDateTime(isoString: string, timeZone: string) {
   const date = new Date(isoString)
-  return {
-    date: format(date, "EEEE, MMMM d, yyyy"),
-    time: format(date, "h:mm a"),
+
+  // Convert Microsoft timezone ID to IANA if needed
+  const ianaTimezone = timezoneMap[timeZone] || timeZone
+
+  // Try to format in the specified timezone, fall back to UTC if invalid
+  try {
+    const dateOptions: Intl.DateTimeFormatOptions = {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: ianaTimezone,
+    }
+
+    const timeOptions: Intl.DateTimeFormatOptions = {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: ianaTimezone,
+    }
+
+    return {
+      date: date.toLocaleDateString("en-US", dateOptions),
+      time: date.toLocaleTimeString("en-US", timeOptions),
+    }
+  } catch {
+    // Fall back to date-fns UTC formatting if timezone is invalid
+    return {
+      date: format(date, "EEEE, MMMM d, yyyy"),
+      time: format(date, "h:mm a"),
+    }
   }
+}
+
+// Get a friendly timezone display name
+function getTimezoneDisplayName(timeZone: string): string {
+  const displayNames: Record<string, string> = {
+    "Eastern Standard Time": "ET",
+    "Pacific Standard Time": "PT",
+    "Central Standard Time": "CT",
+    "Mountain Standard Time": "MT",
+    "UTC": "UTC",
+    "America/New_York": "ET",
+    "America/Los_Angeles": "PT",
+    "America/Chicago": "CT",
+    "America/Denver": "MT",
+  }
+  return displayNames[timeZone] || timeZone
 }
 
 function replaceTemplateVariables(template: string, data: EmailTemplateData): string {
   const start = formatDateTime(data.startTime, data.timeZone)
   const end = formatDateTime(data.endTime, data.timeZone)
-  
+
   const logoUrl = data.logoUrl || process.env.LOGO_URL || "https://ai-booking-notifications-system.onrender.com/images/aditum-logo-horizontal.png"
-  
+  const timezoneDisplay = getTimezoneDisplayName(data.timeZone)
+
   return template
     .replace(/\{\{organizerName\}\}/g, data.organizerName)
     .replace(/\{\{roomName\}\}/g, data.roomName)
@@ -265,7 +320,7 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
     .replace(/\{\{date\}\}/g, start.date)
     .replace(/\{\{startTime\}\}/g, start.time)
     .replace(/\{\{endTime\}\}/g, end.time)
-    .replace(/\{\{timeZone\}\}/g, data.timeZone)
+    .replace(/\{\{timeZone\}\}/g, timezoneDisplay)
     .replace(/\{\{reason\}\}/g, data.reason || "")
     .replace(/\{\{logoUrl\}\}/g, logoUrl)
 }

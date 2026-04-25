@@ -3,15 +3,23 @@ import { getRoomEvent, sendEmail } from "@/lib/microsoft-graph"
 import { renderAcceptedEmail, renderDeclinedEmail } from "@/lib/email-templates"
 import { createClient } from "@/lib/supabase/server"
 
-// Store processed events to ensure idempotency
-const processedEvents = new Map<string, number>()
+// Store processed notifications to ensure idempotency (prevents duplicate webhook processing)
+const processedNotifications = new Map<string, number>()
+
+// Store events for which we've already sent email notifications (prevents duplicate emails)
+const emailsSentForEvents = new Map<string, number>()
 
 // Clean up old entries periodically (keep last 24 hours)
 function cleanupProcessedEvents() {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000
-  for (const [key, timestamp] of processedEvents.entries()) {
+  for (const [key, timestamp] of processedNotifications.entries()) {
     if (timestamp < cutoff) {
-      processedEvents.delete(key)
+      processedNotifications.delete(key)
+    }
+  }
+  for (const [key, timestamp] of emailsSentForEvents.entries()) {
+    if (timestamp < cutoff) {
+      emailsSentForEvents.delete(key)
     }
   }
 }
@@ -59,7 +67,7 @@ export async function POST(request: NextRequest) {
       const idempotencyKey = `${notification.subscriptionId}-${notification.resourceData.id}-${notification.changeType}`
 
       // Check if already processed recently (within last 30 seconds)
-      const lastProcessed = processedEvents.get(idempotencyKey)
+      const lastProcessed = processedNotifications.get(idempotencyKey)
       const thirtySecondsAgo = Date.now() - 30000
 
       if (lastProcessed && lastProcessed > thirtySecondsAgo) {
@@ -68,11 +76,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Mark as processed
-      processedEvents.set(idempotencyKey, Date.now())
+      processedNotifications.set(idempotencyKey, Date.now())
       console.log(`[WEBHOOK] Processing notification: ${idempotencyKey}`)
 
       // Clean up periodically
-      if (processedEvents.size > 1000) {
+      if (processedNotifications.size > 1000) {
         cleanupProcessedEvents()
       }
 
@@ -81,7 +89,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error(`[WEBHOOK] Error processing notification ${idempotencyKey}:`, error)
         // Remove from processed so it can be retried
-        processedEvents.delete(idempotencyKey)
+        processedNotifications.delete(idempotencyKey)
       }
     })
 
@@ -226,6 +234,19 @@ async function processNotification(notification: GraphNotification) {
   console.log(`[WEBHOOK] Organizer: ${organizerEmail}`)
   console.log(`[WEBHOOK] Room: ${roomName}`)
   console.log(`[WEBHOOK] Subject: ${event.subject}`)
+  console.log(`[WEBHOOK] isCancelled: ${event.isCancelled}`)
+
+  // Check if the event is canceled - skip sending confirmation emails for canceled events
+  // Microsoft sends "updated" notifications when events are canceled, not "deleted"
+  // The event may have isCancelled=true or the subject may start with "Canceled:"
+  const isCanceled = event.isCancelled === true || 
+    event.subject?.toLowerCase().startsWith("canceled:") ||
+    event.subject?.toLowerCase().startsWith("cancelled:")
+  
+  if (isCanceled) {
+    console.log(`[WEBHOOK] Event is CANCELED - skipping notification email`)
+    return
+  }
 
   // If the event is newly created and not yet processed, wait briefly and retry
   // Exchange auto-accept typically happens within 1-2 seconds
@@ -242,6 +263,12 @@ async function processNotification(notification: GraphNotification) {
     console.log(`[WEBHOOK] After retry, status is now: "${updatedStatus}"`)
 
     if (updatedStatus === "accepted" || updatedStatus === "tentativelyAccepted") {
+      // Check if we already sent an email for this event
+      if (emailsSentForEvents.has(eventId)) {
+        console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
+        return
+      }
+
       // Process as accepted
       if (!sendAcceptanceNotifications) {
         console.log(`[WEBHOOK] Acceptance notifications disabled, skipping`)
@@ -265,12 +292,19 @@ async function processNotification(notification: GraphNotification) {
           `Room Confirmed: ${roomName} - ${updatedEvent.subject}`,
           htmlContent
         )
+        emailsSentForEvents.set(eventId, Date.now())
         console.log(`[WEBHOOK] SUCCESS: Sent acceptance email after retry`)
       } catch (emailError) {
         console.error(`[WEBHOOK] FAILED to send acceptance email:`, emailError)
       }
       return
     } else if (updatedStatus === "declined") {
+      // Check if we already sent an email for this event
+      if (emailsSentForEvents.has(eventId)) {
+        console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
+        return
+      }
+
       // Process as declined
       if (!sendDeclineNotifications) {
         console.log(`[WEBHOOK] Decline notifications disabled, skipping`)
@@ -295,6 +329,7 @@ async function processNotification(notification: GraphNotification) {
           `Room Unavailable: ${roomName} - ${updatedEvent.subject}`,
           htmlContent
         )
+        emailsSentForEvents.set(eventId, Date.now())
         console.log(`[WEBHOOK] SUCCESS: Sent decline email after retry`)
       } catch (emailError) {
         console.error(`[WEBHOOK] FAILED to send decline email:`, emailError)
@@ -307,6 +342,12 @@ async function processNotification(notification: GraphNotification) {
   }
 
   if (responseStatus === "accepted") {
+    // Check if we already sent an email for this event
+    if (emailsSentForEvents.has(eventId)) {
+      console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
+      return
+    }
+
     if (!sendAcceptanceNotifications) {
       console.log(`[WEBHOOK] Event ACCEPTED but acceptance notifications are disabled, skipping`)
       return
@@ -332,12 +373,19 @@ async function processNotification(notification: GraphNotification) {
         `Room Confirmed: ${roomName} - ${event.subject}`,
         htmlContent
       )
+      emailsSentForEvents.set(eventId, Date.now())
       console.log(`[WEBHOOK] SUCCESS: Sent acceptance email for event ${eventId} to ${organizerEmail}`)
     } catch (emailError) {
       console.error(`[WEBHOOK] FAILED to send acceptance email:`, emailError)
       console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
     }
   } else if (responseStatus === "declined") {
+    // Check if we already sent an email for this event
+    if (emailsSentForEvents.has(eventId)) {
+      console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
+      return
+    }
+
     if (!sendDeclineNotifications) {
       console.log(`[WEBHOOK] Event DECLINED but decline notifications are disabled, skipping`)
       return
@@ -364,12 +412,19 @@ async function processNotification(notification: GraphNotification) {
         `Room Unavailable: ${roomName} - ${event.subject}`,
         htmlContent
       )
+      emailsSentForEvents.set(eventId, Date.now())
       console.log(`[WEBHOOK] SUCCESS: Sent decline email for event ${eventId} to ${organizerEmail}`)
     } catch (emailError) {
       console.error(`[WEBHOOK] FAILED to send decline email:`, emailError)
       console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
     }
   } else if (responseStatus === "tentativelyAccepted") {
+    // Check if we already sent an email for this event
+    if (emailsSentForEvents.has(eventId)) {
+      console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
+      return
+    }
+
     console.log(`[WEBHOOK] Event TENTATIVELY ACCEPTED - treating as accepted for notification purposes`)
     // Send acceptance notification for tentatively accepted
     if (!sendAcceptanceNotifications) {
@@ -393,6 +448,7 @@ async function processNotification(notification: GraphNotification) {
         `Room Confirmed: ${roomName} - ${event.subject}`,
         htmlContent
       )
+      emailsSentForEvents.set(eventId, Date.now())
       console.log(`[WEBHOOK] SUCCESS: Sent acceptance email for tentatively accepted event to ${organizerEmail}`)
     } catch (emailError) {
       console.error(`[WEBHOOK] FAILED to send email:`, emailError)
@@ -412,7 +468,8 @@ export async function GET() {
   return NextResponse.json({
     status: "healthy",
     timestamp: new Date().toISOString(),
-    processedEventsCount: processedEvents.size,
+    processedNotificationsCount: processedNotifications.size,
+    emailsSentCount: emailsSentForEvents.size,
     diagnostics: {
       notificationMailbox: notificationMailbox ? `configured (${notificationMailbox})` : "NOT CONFIGURED - emails will not send",
       webhookUrl: webhookUrl ? `configured (${webhookUrl})` : "NOT CONFIGURED",
