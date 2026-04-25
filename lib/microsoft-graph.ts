@@ -23,18 +23,18 @@ export async function getAccessToken(): Promise<string> {
   if (!process.env.AZURE_CLIENT_ID || !process.env.AZURE_CLIENT_SECRET || !process.env.AZURE_TENANT_ID) {
     throw new Error("Missing Azure AD configuration. Please set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID environment variables.")
   }
-  
+
   const client = getMsalClient()
-  
+
   try {
     const result = await client.acquireTokenByClientCredential({
       scopes: ["https://graph.microsoft.com/.default"],
     })
-    
+
     if (!result?.accessToken) {
       throw new Error("Failed to acquire access token - no token returned")
     }
-    
+
     return result.accessToken
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
@@ -56,7 +56,7 @@ export async function graphRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = await getAccessToken()
-  
+
   const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
     ...options,
     headers: {
@@ -65,12 +65,12 @@ export async function graphRequest<T>(
       ...options.headers,
     },
   })
-  
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
     const errorCode = error?.error?.code || "Unknown"
     const errorMessage = error?.error?.message || "No message"
-    
+
     // Provide actionable error messages
     if (response.status === 401) {
       throw new Error(
@@ -87,13 +87,24 @@ export async function graphRequest<T>(
         `Resource not found (404). The requested mailbox or resource may not exist. Error: ${errorCode} - ${errorMessage}`
       )
     }
-    
+
     throw new Error(
       `Graph API error: ${response.status} - ${errorCode}: ${errorMessage}`
     )
   }
-  
-  return response.json()
+
+  // Handle 204 No Content (e.g., sendMail returns empty response)
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return {} as T
+  }
+
+  // Check if there's actually content to parse
+  const text = await response.text()
+  if (!text || text.trim() === "") {
+    return {} as T
+  }
+
+  return JSON.parse(text)
 }
 
 // Room Mailbox Types
@@ -179,7 +190,7 @@ export async function getRoomCalendarEvents(
     $orderby: "start/dateTime",
     $top: "100",
   })
-  
+
   const response = await graphRequest<{ value: CalendarEvent[] }>(
     `/users/${roomEmail}/calendarView?${params}`
   )
@@ -203,7 +214,7 @@ export async function createSubscription(
   // Subscriptions expire max 4230 minutes (about 3 days) for calendar resources
   const expirationDateTime = new Date()
   expirationDateTime.setMinutes(expirationDateTime.getMinutes() + 4230)
-  
+
   return graphRequest<GraphSubscription>("/subscriptions", {
     method: "POST",
     body: JSON.stringify({
@@ -222,7 +233,7 @@ export async function renewSubscription(
 ): Promise<GraphSubscription> {
   const expirationDateTime = new Date()
   expirationDateTime.setMinutes(expirationDateTime.getMinutes() + 4230)
-  
+
   return graphRequest<GraphSubscription>(`/subscriptions/${subscriptionId}`, {
     method: "PATCH",
     body: JSON.stringify({
@@ -304,14 +315,14 @@ export interface RoomCalendarProcessing {
 export async function getRoomCalendarProcessing(roomEmail: string): Promise<RoomCalendarProcessing> {
   // Note: This requires Exchange admin access via PowerShell or EWS
   // For Graph API, we can get partial settings from mailboxSettings
-  const settings = await graphRequest<{ 
+  const settings = await graphRequest<{
     automaticRepliesSetting?: {
       status: string
       internalReplyMessage?: string
       externalReplyMessage?: string
     }
   }>(`/users/${roomEmail}/mailboxSettings`)
-  
+
   // Return default values - actual room calendar processing needs Exchange admin
   return {
     autoAcceptEnabled: true,
@@ -347,7 +358,7 @@ export async function disableRoomAutoReply(roomEmail: string): Promise<void> {
 
 // Enable automatic reply for room (if needed to restore)
 export async function enableRoomAutoReply(
-  roomEmail: string, 
+  roomEmail: string,
   message: string
 ): Promise<void> {
   await graphRequest(`/users/${roomEmail}/mailboxSettings`, {
@@ -386,20 +397,20 @@ export async function getUserProfile(email: string): Promise<GraphUser> {
 export async function getUserPhoto(email: string): Promise<string | null> {
   try {
     const token = await getAccessToken()
-    
+
     const response = await fetch(`https://graph.microsoft.com/v1.0/users/${email}/photo/$value`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
     })
-    
+
     if (!response.ok) {
       if (response.status === 404) {
         return null // User has no photo
       }
       return null
     }
-    
+
     const blob = await response.blob()
     const arrayBuffer = await blob.arrayBuffer()
     const base64 = Buffer.from(arrayBuffer).toString('base64')
@@ -424,7 +435,7 @@ export async function getUserProfileWithPhoto(email: string): Promise<GraphUser 
     getUserProfile(email),
     getUserPhoto(email)
   ])
-  
+
   return {
     ...profile,
     photoUrl: photo || undefined
