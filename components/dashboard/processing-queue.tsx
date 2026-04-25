@@ -60,11 +60,13 @@ interface ProcessingQueueProps {
   isLoading?: boolean
 }
 
-// Simulate processing steps for a booking
+// NOTE: This generates SIMULATED job data from bookings for UI demonstration
+// In production, this should be replaced with actual webhook event tracking
+// stored in the database as real webhook notifications are processed
 function generateJobFromBooking(booking: BookingEvent): QueueJob {
   const isRecent = new Date(booking.createdAt).getTime() > Date.now() - 60000 // Last minute
   const isProcessing = isRecent && Math.random() > 0.7
-  
+
   const baseSteps: ProcessingStep[] = [
     {
       id: "receive",
@@ -91,9 +93,9 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
       startTime: new Date(new Date(booking.createdAt).getTime() + 150).toISOString(),
       endTime: new Date(new Date(booking.createdAt).getTime() + 300).toISOString(),
       duration: 150,
-      details: booking.outcome === "accepted" 
-        ? "All policies passed" 
-        : booking.outcome === "declined-conflict" 
+      details: booking.outcome === "accepted"
+        ? "All policies passed"
+        : booking.outcome === "declined-conflict"
           ? "Conflict detected with existing booking"
           : "Policy violation detected",
     },
@@ -193,7 +195,7 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
         ) : (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         )}
-        
+
         <div className="flex flex-1 items-center gap-4">
           {/* Status indicator */}
           <div className="relative">
@@ -215,7 +217,7 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
               </div>
             )}
           </div>
-          
+
           {/* Job info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -240,15 +242,15 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
               )}
             </div>
           </div>
-          
+
           {/* Progress bar */}
           <div className="hidden sm:flex w-24 flex-col gap-1">
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div 
+              <div
                 className={cn(
                   "h-full rounded-full transition-all",
-                  job.status === "failed" ? "bg-destructive" : 
-                  job.status === "completed" ? "bg-success" : "bg-primary"
+                  job.status === "failed" ? "bg-destructive" :
+                    job.status === "completed" ? "bg-success" : "bg-primary"
                 )}
                 style={{ width: `${progress}%` }}
               />
@@ -257,14 +259,14 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
               {completedSteps}/{totalSteps}
             </span>
           </div>
-          
+
           {/* Time */}
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             {formatActivityTime(job.createdAt)}
           </span>
         </div>
       </button>
-      
+
       {/* Expanded details */}
       {isExpanded && (
         <div className="bg-muted/30 px-4 py-4 pl-12">
@@ -280,21 +282,21 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
                       step.status === "completed" ? "bg-success/30" : "bg-border"
                     )} style={{ top: `${index * 44 + 20}px`, height: "24px" }} />
                   )}
-                  
+
                   {/* Step icon */}
                   <div className="relative z-10 flex h-4 w-4 shrink-0 items-center justify-center mt-0.5">
                     <StepStatusIcon status={step.status} />
                   </div>
-                  
+
                   {/* Step content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <span className={cn(
                         "text-sm font-medium",
                         step.status === "completed" ? "text-foreground" :
-                        step.status === "in-progress" ? "text-primary" :
-                        step.status === "failed" ? "text-destructive" :
-                        "text-muted-foreground"
+                          step.status === "in-progress" ? "text-primary" :
+                            step.status === "failed" ? "text-destructive" :
+                              "text-muted-foreground"
                       )}>
                         {step.name}
                       </span>
@@ -317,7 +319,7 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
                 </div>
               ))}
             </div>
-            
+
             {/* Actions for failed jobs */}
             {job.status === "failed" && (
               <div className="flex items-center gap-2 pt-2 border-t border-border">
@@ -341,7 +343,7 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<"all" | "processing" | "completed" | "failed">("all")
   const [isRefreshing, setIsRefreshing] = useState(false)
-  
+
   // Convert bookings to queue jobs
   const jobs = bookings
     .slice(0, 20) // Limit to recent 20
@@ -352,19 +354,19 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
       if (b.status === "processing" && a.status !== "processing") return 1
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
-  
+
   const filteredJobs = jobs.filter(job => {
     if (activeFilter === "all") return true
     return job.status === activeFilter
   })
-  
+
   const stats = {
     total: jobs.length,
     processing: jobs.filter(j => j.status === "processing").length,
     completed: jobs.filter(j => j.status === "completed").length,
     failed: jobs.filter(j => j.status === "failed").length,
   }
-  
+
   const handleRefresh = () => {
     setIsRefreshing(true)
     setTimeout(() => setIsRefreshing(false), 1000)
@@ -405,11 +407,11 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-lg">Processing Queue</CardTitle>
-            <CardDescription>Real-time job processing status and history</CardDescription>
+            <CardDescription>Simulated job processing status (based on bookings data)</CardDescription>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleRefresh}
             disabled={isRefreshing}
             className="gap-1.5"
@@ -418,15 +420,15 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
             Refresh
           </Button>
         </div>
-        
+
         {/* Stats summary */}
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <button
             onClick={() => setActiveFilter("all")}
             className={cn(
               "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-              activeFilter === "all" 
-                ? "bg-muted text-foreground font-medium" 
+              activeFilter === "all"
+                ? "bg-muted text-foreground font-medium"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -437,8 +439,8 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
             onClick={() => setActiveFilter("processing")}
             className={cn(
               "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-              activeFilter === "processing" 
-                ? "bg-primary/10 text-primary font-medium" 
+              activeFilter === "processing"
+                ? "bg-primary/10 text-primary font-medium"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -450,8 +452,8 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
             onClick={() => setActiveFilter("completed")}
             className={cn(
               "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-              activeFilter === "completed" 
-                ? "bg-success/10 text-success font-medium" 
+              activeFilter === "completed"
+                ? "bg-success/10 text-success font-medium"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -463,8 +465,8 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
             onClick={() => setActiveFilter("failed")}
             className={cn(
               "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-              activeFilter === "failed" 
-                ? "bg-destructive/10 text-destructive font-medium" 
+              activeFilter === "failed"
+                ? "bg-destructive/10 text-destructive font-medium"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -474,7 +476,7 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
           </button>
         </div>
       </CardHeader>
-      
+
       <CardContent className="p-0">
         <ScrollArea className="h-[400px]">
           {filteredJobs.length === 0 ? (

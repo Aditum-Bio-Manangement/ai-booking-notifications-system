@@ -33,7 +33,7 @@ interface GraphNotification {
 
 export async function POST(request: NextRequest) {
   console.log("[WEBHOOK] POST request received at", new Date().toISOString())
-
+  
   try {
     // Handle validation request from Microsoft Graph
     const validationToken = request.nextUrl.searchParams.get("validationToken")
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     console.log("[WEBHOOK] Received body:", JSON.stringify(body, null, 2))
-
+    
     const notifications: GraphNotification[] = body.value || []
     console.log(`[WEBHOOK] Processing ${notifications.length} notification(s)`)
 
@@ -57,20 +57,20 @@ export async function POST(request: NextRequest) {
       // Create idempotency key - include a short time window to allow reprocessing
       // Microsoft may send the same notification multiple times quickly
       const idempotencyKey = `${notification.subscriptionId}-${notification.resourceData.id}-${notification.changeType}`
-
+      
       // Check if already processed recently (within last 30 seconds)
       const lastProcessed = processedEvents.get(idempotencyKey)
       const thirtySecondsAgo = Date.now() - 30000
-
+      
       if (lastProcessed && lastProcessed > thirtySecondsAgo) {
         console.log(`[WEBHOOK] Skipping duplicate notification (processed ${Math.round((Date.now() - lastProcessed) / 1000)}s ago): ${idempotencyKey}`)
         return
       }
-
+      
       // Mark as processed
       processedEvents.set(idempotencyKey, Date.now())
       console.log(`[WEBHOOK] Processing notification: ${idempotencyKey}`)
-
+      
       // Clean up periodically
       if (processedEvents.size > 1000) {
         cleanupProcessedEvents()
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 
 async function processNotification(notification: GraphNotification) {
   console.log("[WEBHOOK] Processing notification:", JSON.stringify(notification, null, 2))
-
+  
   // Extract room email from resource path
   // Format: /users/{email}/events/{eventId}
   const resourceMatch = notification.resource.match(/\/users\/([^/]+)\/events\/([^/]+)/)
@@ -122,10 +122,10 @@ async function processNotification(notification: GraphNotification) {
   let customNotificationsEnabled = true
   let sendAcceptanceNotifications = true
   let sendDeclineNotifications = true
-
+  
   try {
     const supabase = await createClient()
-
+    
     // First check room-specific settings
     const { data: roomSettings } = await supabase
       .from("room_notification_settings")
@@ -142,7 +142,7 @@ async function processNotification(notification: GraphNotification) {
       const { data: globalSettings } = await supabase
         .from("global_notification_settings")
         .select("setting_key, setting_value")
-
+      
       if (globalSettings && globalSettings.length > 0) {
         for (const setting of globalSettings) {
           if (setting.setting_key === "custom_notifications_enabled" && setting.setting_value?.enabled !== undefined) {
@@ -191,16 +191,102 @@ async function processNotification(notification: GraphNotification) {
   // Determine the outcome and send appropriate notification
   const organizerEmail = event.organizer.emailAddress.address
   const roomName = event.location?.displayName || roomEmail
-  console.log(`[v0] Checking response status: ${event.responseStatus?.response}`)
+  const responseStatus = event.responseStatus?.response
+  
+  console.log(`[WEBHOOK] ====== RESPONSE STATUS CHECK ======`)
+  console.log(`[WEBHOOK] Response status: "${responseStatus}"`)
+  console.log(`[WEBHOOK] Change type: "${notification.changeType}"`)
+  console.log(`[WEBHOOK] Organizer: ${organizerEmail}`)
+  console.log(`[WEBHOOK] Room: ${roomName}`)
+  console.log(`[WEBHOOK] Subject: ${event.subject}`)
+  
+  // If the event is newly created and not yet processed, wait briefly and retry
+  // Exchange auto-accept typically happens within 1-2 seconds
+  if (notification.changeType === "created" && (!responseStatus || responseStatus === "none" || responseStatus === "notResponded")) {
+    console.log(`[WEBHOOK] Event status is "${responseStatus}" for newly created event. Waiting 2s for room to process...`)
+    
+    // Wait 2 seconds for Exchange to process
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    // Re-fetch the event to check if status updated
+    const updatedEvent = await getRoomEvent(roomEmail, eventId)
+    const updatedStatus = updatedEvent.responseStatus?.response
+    
+    console.log(`[WEBHOOK] After retry, status is now: "${updatedStatus}"`)
+    
+    if (updatedStatus === "accepted" || updatedStatus === "tentativelyAccepted") {
+      // Process as accepted
+      if (!sendAcceptanceNotifications) {
+        console.log(`[WEBHOOK] Acceptance notifications disabled, skipping`)
+        return
+      }
+      
+      console.log(`[WEBHOOK] Event now ACCEPTED after retry - sending notification`)
+      const htmlContent = renderAcceptedEmail({
+        organizerName: updatedEvent.organizer.emailAddress.name,
+        roomName,
+        subject: updatedEvent.subject,
+        startTime: updatedEvent.start.dateTime,
+        endTime: updatedEvent.end.dateTime,
+        timeZone: updatedEvent.start.timeZone,
+      })
 
-  if (event.responseStatus?.response === "accepted") {
+      try {
+        await sendEmail(
+          notificationMailbox,
+          organizerEmail,
+          `Room Confirmed: ${roomName} - ${updatedEvent.subject}`,
+          htmlContent
+        )
+        console.log(`[WEBHOOK] SUCCESS: Sent acceptance email after retry`)
+      } catch (emailError) {
+        console.error(`[WEBHOOK] FAILED to send acceptance email:`, emailError)
+      }
+      return
+    } else if (updatedStatus === "declined") {
+      // Process as declined
+      if (!sendDeclineNotifications) {
+        console.log(`[WEBHOOK] Decline notifications disabled, skipping`)
+        return
+      }
+      
+      console.log(`[WEBHOOK] Event DECLINED after retry - sending notification`)
+      const htmlContent = renderDeclinedEmail({
+        organizerName: updatedEvent.organizer.emailAddress.name,
+        roomName,
+        subject: updatedEvent.subject,
+        startTime: updatedEvent.start.dateTime,
+        endTime: updatedEvent.end.dateTime,
+        timeZone: updatedEvent.start.timeZone,
+        reason: "The room has a scheduling conflict with an existing booking.",
+      })
+
+      try {
+        await sendEmail(
+          notificationMailbox,
+          organizerEmail,
+          `Room Unavailable: ${roomName} - ${updatedEvent.subject}`,
+          htmlContent
+        )
+        console.log(`[WEBHOOK] SUCCESS: Sent decline email after retry`)
+      } catch (emailError) {
+        console.error(`[WEBHOOK] FAILED to send decline email:`, emailError)
+      }
+      return
+    } else {
+      console.log(`[WEBHOOK] Status still "${updatedStatus}" after retry. Room may be slow to process or manually managed.`)
+      return
+    }
+  }
+
+  if (responseStatus === "accepted") {
     if (!sendAcceptanceNotifications) {
       console.log(`[WEBHOOK] Event ACCEPTED but acceptance notifications are disabled, skipping`)
       return
     }
     console.log(`[WEBHOOK] Event ACCEPTED - preparing acceptance notification`)
     console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
-
+    
     // Send acceptance notification
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
@@ -224,14 +310,14 @@ async function processNotification(notification: GraphNotification) {
       console.error(`[WEBHOOK] FAILED to send acceptance email:`, emailError)
       console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
     }
-  } else if (event.responseStatus?.response === "declined") {
+  } else if (responseStatus === "declined") {
     if (!sendDeclineNotifications) {
       console.log(`[WEBHOOK] Event DECLINED but decline notifications are disabled, skipping`)
       return
     }
     console.log(`[WEBHOOK] Event DECLINED - preparing decline notification`)
     console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
-
+    
     // Send decline notification
     const htmlContent = renderDeclinedEmail({
       organizerName: event.organizer.emailAddress.name,
@@ -256,8 +342,38 @@ async function processNotification(notification: GraphNotification) {
       console.error(`[WEBHOOK] FAILED to send decline email:`, emailError)
       console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
     }
+  } else if (responseStatus === "tentativelyAccepted") {
+    console.log(`[WEBHOOK] Event TENTATIVELY ACCEPTED - treating as accepted for notification purposes`)
+    // Send acceptance notification for tentatively accepted
+    if (!sendAcceptanceNotifications) {
+      console.log(`[WEBHOOK] Acceptance notifications disabled, skipping`)
+      return
+    }
+    const htmlContent = renderAcceptedEmail({
+      organizerName: event.organizer.emailAddress.name,
+      roomName,
+      subject: event.subject,
+      startTime: event.start.dateTime,
+      endTime: event.end.dateTime,
+      timeZone: event.start.timeZone,
+    })
+
+    try {
+      console.log(`[WEBHOOK] Calling sendEmail via Graph API...`)
+      await sendEmail(
+        notificationMailbox,
+        organizerEmail,
+        `Room Confirmed: ${roomName} - ${event.subject}`,
+        htmlContent
+      )
+      console.log(`[WEBHOOK] SUCCESS: Sent acceptance email for tentatively accepted event to ${organizerEmail}`)
+    } catch (emailError) {
+      console.error(`[WEBHOOK] FAILED to send email:`, emailError)
+    }
   } else {
-    console.log(`[WEBHOOK] Event response status is "${event.responseStatus?.response}" - not accepted/declined, skipping email`)
+    console.log(`[WEBHOOK] Event response status is "${responseStatus}" - not accepted/declined/tentativelyAccepted`)
+    console.log(`[WEBHOOK] No email will be sent for this notification. Possible statuses: none, notResponded, organizer`)
+    console.log(`[WEBHOOK] If this is a new booking, an "updated" notification should follow when the room processes it.`)
   }
 }
 
@@ -265,7 +381,7 @@ async function processNotification(notification: GraphNotification) {
 export async function GET() {
   const notificationMailbox = process.env.NOTIFICATION_MAILBOX
   const webhookUrl = process.env.WEBHOOK_URL
-
+  
   return NextResponse.json({
     status: "healthy",
     timestamp: new Date().toISOString(),
