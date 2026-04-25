@@ -46,7 +46,7 @@ interface QueueJob {
   organizerEmail: string
   roomName: string
   site: string
-  outcome: "accepted" | "declined" | "pending"
+  outcome: "accepted" | "declined" | "pending" | "canceled"
   status: "queued" | "processing" | "completed" | "failed"
   createdAt: string
   completedAt?: string
@@ -58,6 +58,7 @@ interface QueueJob {
 interface ProcessingQueueProps {
   bookings: BookingEvent[]
   isLoading?: boolean
+  onRefresh?: () => void
 }
 
 // Generate job data from booking, showing REAL status based on notificationSent
@@ -178,7 +179,7 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
     organizerEmail: booking.organizerEmail,
     roomName: booking.roomName,
     site: booking.site,
-    outcome: booking.outcome === "accepted" ? "accepted" : booking.outcome === "pending" ? "pending" : "declined",
+    outcome: booking.outcome === "accepted" ? "accepted" : booking.outcome === "pending" ? "pending" : booking.outcome === "canceled" ? "canceled" : "declined",
     status: jobStatus,
     createdAt: booking.createdAt,
     completedAt: jobStatus === "completed" ? (booking.notificationTime || booking.createdAt) : undefined,
@@ -378,10 +379,30 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
   )
 }
 
-export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueueProps) {
+export function ProcessingQueue({ bookings, isLoading = false, onRefresh }: ProcessingQueueProps) {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<"all" | "processing" | "completed" | "failed">("all")
   const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // Auto-refresh every 5 seconds when there are processing jobs
+  useEffect(() => {
+    const hasProcessingJobs = bookings.some(b => {
+      const outcome = b.outcome as string
+      // Pending bookings need refresh
+      if (outcome === "pending") return true
+      // Non-canceled bookings that haven't sent notifications yet need refresh
+      if (outcome !== "canceled" && outcome !== "pending" && !b.notificationSent) return true
+      return false
+    })
+
+    if (hasProcessingJobs && onRefresh) {
+      const interval = setInterval(() => {
+        onRefresh()
+      }, 5000) // Refresh every 5 seconds
+
+      return () => clearInterval(interval)
+    }
+  }, [bookings, onRefresh])
 
   // Convert bookings to queue jobs
   const jobs = bookings

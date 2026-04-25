@@ -295,7 +295,7 @@ export default function DashboardPage() {
                 metrics
               </p>
             </div>
-            <ProcessingQueue bookings={bookingEvents} isLoading={isLoading} />
+            <ProcessingQueue bookings={bookingEvents} isLoading={isLoading} onRefresh={() => mutateEvents()} />
             <SystemHealthPanel
               health={realSystemHealth}
               subscriptions={transformedSubscriptions}

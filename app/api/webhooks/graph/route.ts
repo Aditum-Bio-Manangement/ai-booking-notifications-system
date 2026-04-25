@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getRoomEvent, sendEmail } from "@/lib/microsoft-graph"
+import { getRoomEvent, sendEmail, getUserTimezone } from "@/lib/microsoft-graph"
 import { renderAcceptedEmail, renderDeclinedEmail } from "@/lib/email-templates"
 import { createClient } from "@/lib/supabase/server"
 
@@ -276,13 +276,14 @@ async function processNotification(notification: GraphNotification) {
       }
 
       console.log(`[WEBHOOK] Event now ACCEPTED after retry - sending notification`)
+      const retryAcceptTimezone = await getUserTimezone(organizerEmail)
       const htmlContent = renderAcceptedEmail({
         organizerName: updatedEvent.organizer.emailAddress.name,
         roomName,
         subject: updatedEvent.subject,
         startTime: updatedEvent.start.dateTime,
         endTime: updatedEvent.end.dateTime,
-        timeZone: updatedEvent.start.timeZone,
+        timeZone: retryAcceptTimezone,
       })
 
       try {
@@ -312,13 +313,14 @@ async function processNotification(notification: GraphNotification) {
       }
 
       console.log(`[WEBHOOK] Event DECLINED after retry - sending notification`)
+      const retryDeclineTimezone = await getUserTimezone(organizerEmail)
       const htmlContent = renderDeclinedEmail({
         organizerName: updatedEvent.organizer.emailAddress.name,
         roomName,
         subject: updatedEvent.subject,
         startTime: updatedEvent.start.dateTime,
         endTime: updatedEvent.end.dateTime,
-        timeZone: updatedEvent.start.timeZone,
+        timeZone: retryDeclineTimezone,
         reason: "The room has a scheduling conflict with an existing booking.",
       })
 
@@ -357,14 +359,18 @@ async function processNotification(notification: GraphNotification) {
     console.log(`[WEBHOOK] Event timezone from Graph: "${event.start.timeZone}"`)
     console.log(`[WEBHOOK] Event start dateTime: "${event.start.dateTime}"`)
 
-    // Send acceptance notification
+    // Fetch the organizer's timezone from their mailbox settings
+    const organizerTimezone = await getUserTimezone(organizerEmail)
+    console.log(`[WEBHOOK] Organizer timezone from mailbox settings: "${organizerTimezone}"`)
+
+    // Send acceptance notification using organizer's timezone
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
       roomName,
       subject: event.subject,
       startTime: event.start.dateTime,
       endTime: event.end.dateTime,
-      timeZone: event.start.timeZone || "America/New_York",
+      timeZone: organizerTimezone,
     })
 
     try {
@@ -395,14 +401,18 @@ async function processNotification(notification: GraphNotification) {
     console.log(`[WEBHOOK] Event DECLINED - preparing decline notification`)
     console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
 
-    // Send decline notification
+    // Fetch the organizer's timezone from their mailbox settings
+    const organizerTimezoneDecline = await getUserTimezone(organizerEmail)
+    console.log(`[WEBHOOK] Organizer timezone: "${organizerTimezoneDecline}"`)
+
+    // Send decline notification using organizer's timezone
     const htmlContent = renderDeclinedEmail({
       organizerName: event.organizer.emailAddress.name,
       roomName,
       subject: event.subject,
       startTime: event.start.dateTime,
       endTime: event.end.dateTime,
-      timeZone: event.start.timeZone,
+      timeZone: organizerTimezoneDecline,
       reason: "The room has a scheduling conflict with an existing booking.",
     })
 
@@ -433,13 +443,14 @@ async function processNotification(notification: GraphNotification) {
       console.log(`[WEBHOOK] Acceptance notifications disabled, skipping`)
       return
     }
+    const tentativeTimezone = await getUserTimezone(organizerEmail)
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
       roomName,
       subject: event.subject,
       startTime: event.start.dateTime,
       endTime: event.end.dateTime,
-      timeZone: event.start.timeZone,
+      timeZone: tentativeTimezone,
     })
 
     try {

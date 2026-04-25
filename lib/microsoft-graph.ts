@@ -205,6 +205,19 @@ export async function getRoomEvent(
   return graphRequest<CalendarEvent>(`/users/${roomEmail}/events/${eventId}`)
 }
 
+// Get a user's timezone from their mailbox settings
+export async function getUserTimezone(userEmail: string): Promise<string> {
+  try {
+    const response = await graphRequest<{ timeZone: string }>(
+      `/users/${userEmail}/mailboxSettings/timeZone`
+    )
+    return response.timeZone || "UTC"
+  } catch (error) {
+    console.error(`[GRAPH] Failed to get timezone for ${userEmail}:`, error)
+    return "UTC"
+  }
+}
+
 // Create a subscription for room calendar changes
 export async function createSubscription(
   roomEmail: string,
