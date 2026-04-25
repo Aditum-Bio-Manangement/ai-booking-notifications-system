@@ -19,16 +19,22 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #4169E1 0%, #3DD6D0 100%); padding: 32px; text-align: center;" bgcolor="#4169E1">
+            <td style="background: linear-gradient(135deg, #4169E1 0%, #3DD6D0 100%); padding: 24px 32px;" bgcolor="#4169E1">
               <!--[if mso]>
-              <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:140px;">
+              <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;">
               <v:fill type="gradient" color="#3DD6D0" color2="#4169E1" angle="135"/>
               <v:textbox inset="0,0,0,0">
               <![endif]-->
-              <div style="background: linear-gradient(135deg, #4169E1 0%, #3DD6D0 100%); padding: 32px; text-align: center;">
-                <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 60px; margin-bottom: 16px;" height="60">
-                <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Room Booking Confirmed</h1>
-              </div>
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                <tr>
+                  <td style="vertical-align: middle;" valign="middle" width="120">
+                    <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 60px; display: block;" height="60">
+                  </td>
+                  <td style="vertical-align: middle; padding-left: 20px;" valign="middle">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Room Booking Confirmed</h1>
+                  </td>
+                </tr>
+              </table>
               <!--[if mso]>
               </v:textbox>
               </v:rect>
@@ -125,16 +131,22 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #1E3A5F 0%, #4169E1 100%); padding: 32px; text-align: center;" bgcolor="#1E3A5F">
+            <td style="background: linear-gradient(135deg, #1E3A5F 0%, #4169E1 100%); padding: 24px 32px;" bgcolor="#1E3A5F">
               <!--[if mso]>
-              <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:140px;">
+              <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;">
               <v:fill type="gradient" color="#4169E1" color2="#1E3A5F" angle="135"/>
               <v:textbox inset="0,0,0,0">
               <![endif]-->
-              <div style="background: linear-gradient(135deg, #1E3A5F 0%, #4169E1 100%); padding: 32px; text-align: center;">
-                <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 60px; margin-bottom: 16px;" height="60">
-                <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Room Unavailable</h1>
-              </div>
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                <tr>
+                  <td style="vertical-align: middle;" valign="middle" width="120">
+                    <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 60px; display: block;" height="60">
+                  </td>
+                  <td style="vertical-align: middle; padding-left: 20px;" valign="middle">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Room Unavailable</h1>
+                  </td>
+                </tr>
+              </table>
               <!--[if mso]>
               </v:textbox>
               </v:rect>
