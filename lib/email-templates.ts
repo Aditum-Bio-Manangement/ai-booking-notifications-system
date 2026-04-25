@@ -256,7 +256,7 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
   const start = formatDateTime(data.startTime, data.timeZone)
   const end = formatDateTime(data.endTime, data.timeZone)
   
-  const logoUrl = data.logoUrl || process.env.LOGO_URL || "https://aditumbio.com/logo.png"
+  const logoUrl = data.logoUrl || process.env.LOGO_URL || "https://ai-booking-notifications-system.onrender.com/images/aditum-logo-horizontal.png"
   
   return template
     .replace(/\{\{organizerName\}\}/g, data.organizerName)
