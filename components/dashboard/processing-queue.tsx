@@ -19,7 +19,27 @@ import {
   Loader2,
   ChevronRight,
   ChevronDown,
+  Trash2,
+  StopCircle,
+  MoreVertical,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import { useTimezone } from "@/lib/timezone-context"
 import type { BookingEvent } from "@/lib/types"
@@ -59,6 +79,8 @@ interface ProcessingQueueProps {
   bookings: BookingEvent[]
   isLoading?: boolean
   onRefresh?: () => void
+  onDeleteBooking?: (bookingId: string) => void
+  onEndWithError?: (bookingId: string) => void
 }
 
 // Generate job data from booking, showing REAL status based on notificationSent
@@ -216,7 +238,13 @@ function JobStatusBadge({ status }: { status: QueueJob["status"] }) {
   return <Badge className={cn("font-medium", className)}>{label}</Badge>
 }
 
-function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: boolean; onToggle: () => void }) {
+function JobRow({ job, isExpanded, onToggle, onDelete, onEndWithError }: {
+  job: QueueJob;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onDelete?: (bookingId: string) => void;
+  onEndWithError?: (bookingId: string) => void;
+}) {
   const { formatActivityTime } = useTimezone()
   const currentStep = job.steps.find(s => s.status === "in-progress")
   const failedStep = job.steps.find(s => s.status === "failed")
@@ -304,6 +332,46 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             {formatActivityTime(job.createdAt)}
           </span>
+
+          {/* Actions dropdown */}
+          {(onDelete || onEndWithError) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {job.status === "processing" && onEndWithError && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onEndWithError(job.bookingId)
+                    }}
+                    className="text-warning"
+                  >
+                    <StopCircle className="mr-2 h-4 w-4" />
+                    End with Error
+                  </DropdownMenuItem>
+                )}
+                {onDelete && (
+                  <>
+                    {job.status === "processing" && onEndWithError && <DropdownMenuSeparator />}
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDelete(job.bookingId)
+                      }}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete from Queue
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </button>
 
@@ -379,10 +447,39 @@ function JobRow({ job, isExpanded, onToggle }: { job: QueueJob; isExpanded: bool
   )
 }
 
-export function ProcessingQueue({ bookings, isLoading = false, onRefresh }: ProcessingQueueProps) {
+export function ProcessingQueue({ bookings, isLoading = false, onRefresh, onDeleteBooking, onEndWithError }: ProcessingQueueProps) {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<"all" | "processing" | "completed" | "failed">("all")
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [endErrorDialogOpen, setEndErrorDialogOpen] = useState(false)
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
+
+  const handleDeleteClick = (bookingId: string) => {
+    setSelectedBookingId(bookingId)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleEndWithErrorClick = (bookingId: string) => {
+    setSelectedBookingId(bookingId)
+    setEndErrorDialogOpen(true)
+  }
+
+  const confirmDelete = () => {
+    if (selectedBookingId && onDeleteBooking) {
+      onDeleteBooking(selectedBookingId)
+    }
+    setDeleteDialogOpen(false)
+    setSelectedBookingId(null)
+  }
+
+  const confirmEndWithError = () => {
+    if (selectedBookingId && onEndWithError) {
+      onEndWithError(selectedBookingId)
+    }
+    setEndErrorDialogOpen(false)
+    setSelectedBookingId(null)
+  }
 
   // Auto-refresh every 5 seconds when there are processing jobs
   useEffect(() => {
@@ -557,12 +654,52 @@ export function ProcessingQueue({ bookings, isLoading = false, onRefresh }: Proc
                   job={job}
                   isExpanded={expandedJobId === job.id}
                   onToggle={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}
+                  onDelete={onDeleteBooking ? handleDeleteClick : undefined}
+                  onEndWithError={onEndWithError ? handleEndWithErrorClick : undefined}
                 />
               ))}
             </div>
           )}
         </ScrollArea>
       </CardContent>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete from Queue</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove this booking from the processing queue.
+              The booking will still exist in the calendar but will no longer be tracked.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* End with error confirmation dialog */}
+      <AlertDialog open={endErrorDialogOpen} onOpenChange={setEndErrorDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>End with Error</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark this booking as failed and stop processing.
+              No notification email will be sent to the organizer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmEndWithError} className="bg-warning text-warning-foreground hover:bg-warning/90">
+              End with Error
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }

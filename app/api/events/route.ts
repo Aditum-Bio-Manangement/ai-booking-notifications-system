@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getRoomCalendarEvents, getRoomMailboxes } from "@/lib/microsoft-graph"
 
+// Store for manually managed bookings (deleted/errored)
+const managedBookings = new Map<string, { deleted?: boolean; error?: boolean; errorTime?: string }>()
+
 // Timezone conversion for Microsoft Graph API events
 // Timezone offsets for US timezones (handles both standard and daylight time)
 // Maps Microsoft Graph timezone names to UTC offset in hours
@@ -143,14 +146,87 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Sort by creation date, newest first
-    bookings.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    // Apply managed booking status (deleted/errored) and filter
+    const filteredBookings = bookings
+      .filter(booking => {
+        const managed = managedBookings.get(booking.id)
+        return !managed?.deleted
+      })
+      .map(booking => {
+        const managed = managedBookings.get(booking.id)
+        if (managed?.error) {
+          return {
+            ...booking,
+            outcome: "declined-policy" as const,
+            declineReason: "Processing ended with error",
+            notificationSent: false,
+          }
+        }
+        return booking
+      })
 
-    return NextResponse.json({ bookings, configured: true })
+    // Sort by creation date, newest first
+    filteredBookings.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    return NextResponse.json({ bookings: filteredBookings, configured: true })
   } catch (error) {
     console.error("Error fetching events:", error)
     return NextResponse.json(
       { error: "Failed to fetch events", message: String(error) },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { bookingId } = await request.json()
+
+    if (!bookingId) {
+      return NextResponse.json(
+        { error: "Booking ID is required" },
+        { status: 400 }
+      )
+    }
+
+    // Mark the booking as deleted
+    managedBookings.set(bookingId, { deleted: true })
+
+    return NextResponse.json({ success: true, message: "Booking removed from queue" })
+  } catch (error) {
+    console.error("Error deleting booking:", error)
+    return NextResponse.json(
+      { error: "Failed to delete booking", message: String(error) },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const { bookingId, action } = await request.json()
+
+    if (!bookingId) {
+      return NextResponse.json(
+        { error: "Booking ID is required" },
+        { status: 400 }
+      )
+    }
+
+    if (action === "end-with-error") {
+      // Mark the booking as ended with error
+      managedBookings.set(bookingId, { error: true, errorTime: new Date().toISOString() })
+      return NextResponse.json({ success: true, message: "Booking marked as failed" })
+    }
+
+    return NextResponse.json(
+      { error: "Unknown action" },
+      { status: 400 }
+    )
+  } catch (error) {
+    console.error("Error updating booking:", error)
+    return NextResponse.json(
+      { error: "Failed to update booking", message: String(error) },
       { status: 500 }
     )
   }

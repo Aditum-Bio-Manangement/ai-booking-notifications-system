@@ -25,15 +25,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { 
-  CheckCircle2, 
-  XCircle, 
-  Eye, 
-  Code, 
-  Save, 
-  RotateCcw, 
-  History, 
-  Trash2, 
+import {
+  CheckCircle2,
+  XCircle,
+  Eye,
+  Code,
+  Save,
+  RotateCcw,
+  History,
+  Trash2,
   MoreVertical,
   Clock,
   ArrowUpFromLine,
@@ -98,10 +98,10 @@ export function EmailTemplateEditor() {
   const [showTestVariables, setShowTestVariables] = useState(false)
   const [showSendTest, setShowSendTest] = useState(false)
   const [mounted, setMounted] = useState(false)
-  
+
   // Test variables for preview
   const [sampleData, setSampleData] = useState(defaultSampleData)
-  
+
   // Send test email state
   const [testEmailTo, setTestEmailTo] = useState("")
   const [isSendingTest, setIsSendingTest] = useState(false)
@@ -120,18 +120,48 @@ export function EmailTemplateEditor() {
     },
   })
 
-  // Load from localStorage on mount
+  // Load templates from API on mount
   useEffect(() => {
     setMounted(true)
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        setTemplateState(parsed)
+    async function loadTemplates() {
+      try {
+        // Load accepted template
+        const acceptedRes = await fetch("/api/email-templates?type=accepted")
+        const acceptedData = await acceptedRes.json()
+
+        // Load declined template
+        const declinedRes = await fetch("/api/email-templates?type=declined")
+        const declinedData = await declinedRes.json()
+
+        setTemplateState(prev => ({
+          accepted: {
+            current: acceptedData.template
+              ? { subject: acceptedData.template.subject || defaultTemplates.accepted.subject, body: acceptedData.template.body }
+              : { subject: defaultTemplates.accepted.subject, body: defaultTemplates.accepted.body },
+            versions: prev.accepted.versions,
+          },
+          declined: {
+            current: declinedData.template
+              ? { subject: declinedData.template.subject || defaultTemplates.declined.subject, body: declinedData.template.body }
+              : { subject: defaultTemplates.declined.subject, body: defaultTemplates.declined.body },
+            versions: prev.declined.versions,
+          },
+        }))
+      } catch (e) {
+        console.error("Failed to load templates from API:", e)
+        // Fall back to localStorage
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY)
+          if (saved) {
+            const parsed = JSON.parse(saved)
+            setTemplateState(parsed)
+          }
+        } catch {
+          // Use defaults
+        }
       }
-    } catch (e) {
-      console.error("Failed to load templates from storage:", e)
     }
+    loadTemplates()
   }, [])
 
   // Current template helpers
@@ -159,12 +189,28 @@ export function EmailTemplateEditor() {
     }))
   }
 
-  // Save current template as a new version
+  // Save current template to API and create a version
   const handleSave = async () => {
     setIsSaving(true)
     setSaveStatus("idle")
 
     try {
+      // Save to API
+      const response = await fetch("/api/email-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: activeTemplate,
+          subject: currentSubject,
+          htmlBody: currentBody,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to save template")
+      }
+
+      // Create local version history entry
       const newVersion: TemplateVersion = {
         id: crypto.randomUUID(),
         subject: currentSubject,
@@ -177,18 +223,18 @@ export function EmailTemplateEditor() {
         ...templateState,
         [activeTemplate]: {
           current: { subject: currentSubject, body: currentBody },
-          versions: [newVersion, ...templateState[activeTemplate].versions].slice(0, 20), // Keep max 20 versions
+          versions: [newVersion, ...templateState[activeTemplate].versions].slice(0, 20),
         },
       }
 
       setTemplateState(newState)
+      // Also save to localStorage as backup
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newState))
 
-      // Simulate API save
-      await new Promise((resolve) => setTimeout(resolve, 500))
       setSaveStatus("success")
       setTimeout(() => setSaveStatus("idle"), 3000)
-    } catch {
+    } catch (err) {
+      console.error("Failed to save template:", err)
       setSaveStatus("error")
     } finally {
       setIsSaving(false)
@@ -196,10 +242,19 @@ export function EmailTemplateEditor() {
   }
 
   // Reset to default template
-  const handleResetToDefault = () => {
-    const defaults = activeTemplate === "accepted" 
-      ? defaultTemplates.accepted 
+  const handleResetToDefault = async () => {
+    const defaults = activeTemplate === "accepted"
+      ? defaultTemplates.accepted
       : defaultTemplates.declined
+
+    // Delete custom template from API
+    try {
+      await fetch(`/api/email-templates?type=${activeTemplate}`, {
+        method: "DELETE",
+      })
+    } catch (err) {
+      console.error("Failed to reset template in API:", err)
+    }
 
     setTemplateState((prev) => ({
       ...prev,
@@ -284,7 +339,7 @@ export function EmailTemplateEditor() {
                       <FieldLabel className="flex items-center gap-2">
                         <code className="rounded bg-muted px-1 text-xs">{`{{${key}}}`}</code>
                       </FieldLabel>
-                      <Input 
+                      <Input
                         value={value}
                         onChange={(e) => setSampleData(prev => ({ ...prev, [key]: e.target.value }))}
                       />
@@ -328,7 +383,7 @@ export function EmailTemplateEditor() {
                 <FieldGroup>
                   <Field>
                     <FieldLabel>Recipient Email</FieldLabel>
-                    <Input 
+                    <Input
                       type="email"
                       placeholder="test@example.com"
                       value={testEmailTo}
@@ -353,7 +408,7 @@ export function EmailTemplateEditor() {
                 <DialogClose asChild>
                   <Button variant="outline">Cancel</Button>
                 </DialogClose>
-                <Button 
+                <Button
                   onClick={async () => {
                     if (!testEmailTo) return
                     setIsSendingTest(true)
@@ -416,7 +471,7 @@ export function EmailTemplateEditor() {
               <DialogHeader>
                 <DialogTitle>Version History</DialogTitle>
                 <DialogDescription>
-                  {activeTemplate === "accepted" ? "Accepted" : "Declined"} template versions. 
+                  {activeTemplate === "accepted" ? "Accepted" : "Declined"} template versions.
                   Restore a previous version or delete versions you no longer need.
                 </DialogDescription>
               </DialogHeader>

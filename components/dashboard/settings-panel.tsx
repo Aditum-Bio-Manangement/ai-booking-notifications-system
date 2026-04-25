@@ -26,6 +26,8 @@ import {
   EyeOff,
   Send,
   TestTube,
+  Pencil,
+  Clock,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
@@ -279,6 +281,9 @@ export function SettingsPanel() {
 
   const [isCreating, setIsCreating] = useState(false)
   const [newRoomEmail, setNewRoomEmail] = useState("")
+  const [subscriptionDuration, setSubscriptionDuration] = useState(72) // Default 72 hours (3 days)
+  const [editingSubscription, setEditingSubscription] = useState<{ id: string; roomEmail: string; expiresIn: number } | null>(null)
+  const [renewDuration, setRenewDuration] = useState(72)
 
   // User management state
   const [users, setUsers] = useState<AppUser[]>(mockUsers)
@@ -411,7 +416,7 @@ export function SettingsPanel() {
       const response = await fetch("/api/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomEmail: newRoomEmail }),
+        body: JSON.stringify({ roomEmail: newRoomEmail, durationHours: subscriptionDuration }),
       })
       const data = await response.json()
 
@@ -432,14 +437,15 @@ export function SettingsPanel() {
     }
   }
 
-  const handleRenewSubscription = async (subscriptionId: string) => {
+  const handleRenewSubscription = async (subscriptionId: string, durationHours?: number) => {
     try {
       await fetch("/api/subscriptions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionId }),
+        body: JSON.stringify({ subscriptionId, durationHours: durationHours || 72 }),
       })
       mutateSubscriptions()
+      setEditingSubscription(null)
     } catch (error) {
       console.error("Failed to renew subscription:", error)
     }
@@ -556,30 +562,45 @@ export function SettingsPanel() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <Input
-                      placeholder="room@aditumbio.com"
-                      value={newRoomEmail}
-                      onChange={(e) => setNewRoomEmail(e.target.value)}
-                      list="room-emails"
-                    />
-                    <datalist id="room-emails">
-                      {Array.isArray(roomsData?.rooms) && roomsData.rooms.map((room, index) => (
-                        <option key={`room-option-${index}-${room?.email || ''}`} value={room?.email || ''}>
-                          {room?.name || 'Unknown'}
-                        </option>
-                      ))}
-                    </datalist>
+                <div className="flex flex-col gap-4">
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="room@aditumbio.com"
+                        value={newRoomEmail}
+                        onChange={(e) => setNewRoomEmail(e.target.value)}
+                        list="room-emails"
+                      />
+                      <datalist id="room-emails">
+                        {Array.isArray(roomsData?.rooms) && roomsData.rooms.map((room, index) => (
+                          <option key={`room-option-${index}-${room?.email || ''}`} value={room?.email || ''}>
+                            {room?.name || 'Unknown'}
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
+                    <Select value={String(subscriptionDuration)} onValueChange={(v) => setSubscriptionDuration(Number(v))}>
+                      <SelectTrigger className="w-36">
+                        <SelectValue placeholder="Duration" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="24">24 hours</SelectItem>
+                        <SelectItem value="48">48 hours</SelectItem>
+                        <SelectItem value="72">72 hours (max)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={handleCreateSubscription}
+                      disabled={isCreating || !newRoomEmail}
+                      className="gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {isCreating ? "Creating..." : "Create"}
+                    </Button>
                   </div>
-                  <Button
-                    onClick={handleCreateSubscription}
-                    disabled={isCreating || !newRoomEmail}
-                    className="gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    {isCreating ? "Creating..." : "Create"}
-                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Microsoft Graph subscriptions expire after a maximum of ~70 hours. Set the duration and renew before expiration.
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -643,8 +664,19 @@ export function SettingsPanel() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              onClick={() => {
+                                setEditingSubscription({ id: sub.id, roomEmail: sub.roomEmail, expiresIn })
+                                setRenewDuration(72)
+                              }}
+                              title="Edit/Extend subscription"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => handleRenewSubscription(sub.id)}
-                              title="Renew subscription"
+                              title="Quick renew (72h)"
                             >
                               <RefreshCw className="h-4 w-4" />
                             </Button>
@@ -665,6 +697,50 @@ export function SettingsPanel() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Edit Subscription Dialog */}
+            <Dialog open={!!editingSubscription} onOpenChange={(open) => !open && setEditingSubscription(null)}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Edit Subscription Duration
+                  </DialogTitle>
+                  <DialogDescription>
+                    Set the duration for renewing the subscription for {editingSubscription?.roomEmail}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel>Subscription Duration</FieldLabel>
+                      <Select value={String(renewDuration)} onValueChange={(v) => setRenewDuration(Number(v))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select duration" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="12">12 hours</SelectItem>
+                          <SelectItem value="24">24 hours</SelectItem>
+                          <SelectItem value="48">48 hours</SelectItem>
+                          <SelectItem value="72">72 hours (maximum)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Current status: {editingSubscription?.expiresIn ? `Expires in ${editingSubscription.expiresIn} hours` : "Unknown"}
+                      </p>
+                    </Field>
+                  </FieldGroup>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setEditingSubscription(null)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={() => editingSubscription && handleRenewSubscription(editingSubscription.id, renewDuration)}>
+                    Renew Subscription
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </TabsContent>
 
@@ -1153,7 +1229,7 @@ Set-CalendarProcessing -Identity "room@aditumbio.com" \\
                   </FieldDescription>
                   <Input
                     placeholder="Not configured"
-                    value={process.env.NEXT_PUBLIC_AZURE_TENANT_ID ? "••••••••-••••-••••-••••-••••••••" + (process.env.NEXT_PUBLIC_AZURE_TENANT_ID?.slice(-4) || "") : "Set via AZURE_TENANT_ID env var"}
+                    value={process.env.NEXT_PUBLIC_AZURE_TENANT_ID ? "••••••••-••••-••���•-••••-••••••••" + (process.env.NEXT_PUBLIC_AZURE_TENANT_ID?.slice(-4) || "") : "Set via AZURE_TENANT_ID env var"}
                     disabled
                   />
                 </Field>

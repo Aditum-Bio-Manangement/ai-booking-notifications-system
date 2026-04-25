@@ -1,5 +1,31 @@
 import { format } from "date-fns"
 
+// Custom template cache - synced with API
+interface CustomTemplate {
+  subject: string
+  body: string
+  updatedAt: string
+}
+
+// In-memory cache for custom templates
+let customTemplatesCache: {
+  accepted: CustomTemplate | null
+  declined: CustomTemplate | null
+} = {
+  accepted: null,
+  declined: null,
+}
+
+// Function to set custom templates (called from API sync)
+export function setCustomTemplate(type: "accepted" | "declined", template: CustomTemplate | null) {
+  customTemplatesCache[type] = template
+}
+
+// Function to get custom templates
+export function getCustomTemplateCache(type: "accepted" | "declined"): CustomTemplate | null {
+  return customTemplatesCache[type]
+}
+
 // Default email templates - these can be customized via the UI
 export const defaultTemplates = {
   accepted: {
@@ -400,14 +426,23 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
 }
 
 export function renderAcceptedEmail(data: EmailTemplateData): string {
-  return replaceTemplateVariables(defaultTemplates.accepted.body, data)
+  // Use custom template if available, otherwise use default
+  const customTemplate = customTemplatesCache.accepted
+  const template = customTemplate?.body || defaultTemplates.accepted.body
+  return replaceTemplateVariables(template, data)
 }
 
 export function renderDeclinedEmail(data: EmailTemplateData): string {
-  return replaceTemplateVariables(defaultTemplates.declined.body, data)
+  // Use custom template if available, otherwise use default
+  const customTemplate = customTemplatesCache.declined
+  const template = customTemplate?.body || defaultTemplates.declined.body
+  return replaceTemplateVariables(template, data)
 }
 
 export function getEmailSubject(type: "accepted" | "declined", data: EmailTemplateData): string {
-  const template = type === "accepted" ? defaultTemplates.accepted.subject : defaultTemplates.declined.subject
+  // Use custom template subject if available
+  const customTemplate = customTemplatesCache[type]
+  const template = customTemplate?.subject ||
+    (type === "accepted" ? defaultTemplates.accepted.subject : defaultTemplates.declined.subject)
   return replaceTemplateVariables(template, data)
 }

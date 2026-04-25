@@ -123,7 +123,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { roomEmail, notificationUrl } = body
+    const { roomEmail, notificationUrl, durationHours } = body
 
     if (!roomEmail) {
       return NextResponse.json(
@@ -132,13 +132,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Convert hours to minutes (default to 72 hours = 4320 minutes, max is 70.5 hours = 4230 minutes)
+    const durationMinutes = durationHours ? Math.min(durationHours * 60, 4230) : 4230
+
     if (!isGraphConfigured()) {
-      // Create mock subscription
+      // Create mock subscription with specified duration
       const mockSub = {
         id: crypto.randomUUID(),
         roomEmail,
         resource: `/users/${roomEmail}/events`,
-        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days from now
+        expiresAt: new Date(Date.now() + durationMinutes * 60 * 1000).toISOString(),
         status: "active" as const,
       }
 
@@ -160,7 +163,7 @@ export async function POST(request: NextRequest) {
     const clientState = crypto.randomUUID()
 
     try {
-      const subscription = await createSubscription(roomEmail, webhookUrl, clientState)
+      const subscription = await createSubscription(roomEmail, webhookUrl, clientState, durationMinutes)
 
       console.log(`[SUBSCRIPTION] Successfully created subscription: ${subscription.id}`)
       console.log(`[SUBSCRIPTION] Expires at: ${subscription.expirationDateTime}`)
@@ -201,7 +204,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { subscriptionId } = body
+    const { subscriptionId, durationHours } = body
 
     if (!subscriptionId) {
       return NextResponse.json(
@@ -209,6 +212,9 @@ export async function PATCH(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Convert hours to minutes (default to max 4230 minutes)
+    const durationMinutes = durationHours ? Math.min(durationHours * 60, 4230) : 4230
 
     if (!isGraphConfigured()) {
       // Renew mock subscription
@@ -219,7 +225,7 @@ export async function PATCH(request: NextRequest) {
 
       mockSubscriptions[subIndex] = {
         ...mockSubscriptions[subIndex],
-        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + durationMinutes * 60 * 1000).toISOString(),
         status: "active",
       }
 
@@ -229,7 +235,7 @@ export async function PATCH(request: NextRequest) {
       })
     }
 
-    const subscription = await renewSubscription(subscriptionId)
+    const subscription = await renewSubscription(subscriptionId, durationMinutes)
 
     return NextResponse.json({
       subscription: {

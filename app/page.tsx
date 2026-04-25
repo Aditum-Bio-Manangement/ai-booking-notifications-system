@@ -100,6 +100,42 @@ export default function DashboardPage() {
     avgProcessingTime: Math.round(avgProcessingTimeSeconds),
   }
 
+  // Handle delete booking from queue
+  const handleDeleteBooking = async (bookingId: string) => {
+    try {
+      const response = await fetch("/api/events", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId }),
+      })
+      if (response.ok) {
+        await mutateEvents()
+      } else {
+        console.error("Failed to delete booking")
+      }
+    } catch (error) {
+      console.error("Error deleting booking:", error)
+    }
+  }
+
+  // Handle end booking with error
+  const handleEndWithError = async (bookingId: string) => {
+    try {
+      const response = await fetch("/api/events", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId, action: "end-with-error" }),
+      })
+      if (response.ok) {
+        await mutateEvents()
+      } else {
+        console.error("Failed to end booking with error")
+      }
+    } catch (error) {
+      console.error("Error ending booking:", error)
+    }
+  }
+
   // Handle settings navigation from header
   const handleSettingsClick = (section: string) => {
     if (section === "templates") {
@@ -251,10 +287,31 @@ export default function DashboardPage() {
           ? new Date(Math.max(...notificationTimes)).toISOString()
           : new Date().toISOString()
 
+        // Calculate queue depth: pending items + items that should have notification sent but haven't
+        const queueDepth = bookingEvents.filter(b => {
+          if (b.outcome === "pending") return true
+          // Items that should have notification but don't yet
+          if (b.outcome !== "canceled" && !b.notificationSent &&
+            (b.outcome === "accepted" || b.outcome === "declined-conflict" || b.outcome === "declined-policy")) {
+            return true
+          }
+          return false
+        }).length
+
+        // Dead letter: items that failed to send notification (outcome set but no notification and old enough)
+        const deadLetterCount = bookingEvents.filter(b => {
+          if (b.outcome === "pending" || b.outcome === "canceled") return false
+          if (b.notificationSent) return false
+          // Consider it dead letter if created more than 5 minutes ago without notification
+          const createdTime = new Date(b.createdAt).getTime()
+          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
+          return createdTime < fiveMinutesAgo
+        }).length
+
         const realSystemHealth = {
           webhookStatus: "healthy" as const,
-          queueDepth: bookingEvents.filter(b => b.outcome === "pending").length,
-          deadLetterCount: bookingEvents.filter(b => !b.notificationSent && b.outcome !== "pending" && b.outcome !== "canceled").length,
+          queueDepth,
+          deadLetterCount,
           subscriptionHealth: subscriptions.length > 0 ? 100 : 0,
           lastProcessedTime,
           notificationSuccessRate: successRate,
@@ -295,11 +352,17 @@ export default function DashboardPage() {
                 metrics
               </p>
             </div>
-            <ProcessingQueue bookings={bookingEvents} isLoading={isLoading} onRefresh={() => mutateEvents()} />
+            <ProcessingQueue
+              bookings={bookingEvents}
+              isLoading={isLoading}
+              onRefresh={() => mutateEvents()}
+              onDeleteBooking={handleDeleteBooking}
+              onEndWithError={handleEndWithError}
+            />
             <SystemHealthPanel
               health={realSystemHealth}
               subscriptions={transformedSubscriptions}
-              processingCount={bookingEvents.filter(b => b.outcome === "pending").length}
+              processingCount={queueDepth}
               onRefresh={() => mutateSubscriptions()}
             />
           </div>

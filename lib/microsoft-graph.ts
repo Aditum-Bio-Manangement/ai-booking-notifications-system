@@ -225,14 +225,18 @@ export async function getUserTimezone(userEmail: string): Promise<string> {
 }
 
 // Create a subscription for room calendar changes
+// durationMinutes defaults to 4230 (max for calendar resources, about 70.5 hours / ~3 days)
 export async function createSubscription(
   roomEmail: string,
   notificationUrl: string,
-  clientState: string
+  clientState: string,
+  durationMinutes: number = 4230
 ): Promise<GraphSubscription> {
   // Subscriptions expire max 4230 minutes (about 3 days) for calendar resources
+  // Clamp duration to valid range (1 minute to 4230 minutes)
+  const clampedDuration = Math.min(Math.max(durationMinutes, 1), 4230)
   const expirationDateTime = new Date()
-  expirationDateTime.setMinutes(expirationDateTime.getMinutes() + 4230)
+  expirationDateTime.setMinutes(expirationDateTime.getMinutes() + clampedDuration)
 
   return graphRequest<GraphSubscription>("/subscriptions", {
     method: "POST",
@@ -247,11 +251,14 @@ export async function createSubscription(
 }
 
 // Renew an existing subscription
+// durationMinutes defaults to 4230 (max for calendar resources)
 export async function renewSubscription(
-  subscriptionId: string
+  subscriptionId: string,
+  durationMinutes: number = 4230
 ): Promise<GraphSubscription> {
+  const clampedDuration = Math.min(Math.max(durationMinutes, 1), 4230)
   const expirationDateTime = new Date()
-  expirationDateTime.setMinutes(expirationDateTime.getMinutes() + 4230)
+  expirationDateTime.setMinutes(expirationDateTime.getMinutes() + clampedDuration)
 
   return graphRequest<GraphSubscription>(`/subscriptions/${subscriptionId}`, {
     method: "PATCH",
