@@ -12,7 +12,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: 'Booking Notifications Admin | Aditum Bio',
   description: 'AI-Enhanced Booking Notification Admin Dashboard for Cambridge and Oakland offices',
-  generator: 'v0.app',
+  generator: 'Created by Aditum Bio',
   icons: {
     icon: '/images/aditum-logo-stacked.png',
     apple: '/images/aditum-logo-stacked.png',
