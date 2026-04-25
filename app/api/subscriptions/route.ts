@@ -5,6 +5,7 @@ import {
   listSubscriptions,
   renewSubscription,
 } from "@/lib/microsoft-graph"
+import { createClient } from "@/lib/supabase/server"
 
 // In-memory storage for mock subscriptions (in production, use a database)
 let mockSubscriptions: Array<{
@@ -21,6 +22,62 @@ const isGraphConfigured = () => {
   const clientSecret = process.env.AZURE_AD_CLIENT_SECRET || process.env.AZURE_CLIENT_SECRET
   const tenantId = process.env.AZURE_AD_TENANT_ID || process.env.AZURE_TENANT_ID
   return !!(clientId && clientSecret && tenantId)
+}
+
+// Helper to save subscription to Supabase
+async function saveSubscriptionToDb(subscription: {
+  id: string
+  roomEmail: string
+  resource: string
+  expiresAt: string
+  notificationUrl: string
+  changeType?: string
+}) {
+  try {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+      .from("subscriptions")
+      .upsert({
+        graph_subscription_id: subscription.id,
+        room_email: subscription.roomEmail,
+        room_name: subscription.roomEmail.split("@")[0], // Extract room name from email
+        resource: subscription.resource,
+        change_type: subscription.changeType || "created,updated,deleted",
+        notification_url: subscription.notificationUrl,
+        expiration_date: subscription.expiresAt,
+        status: "active",
+        updated_at: new Date().toISOString()
+      }, { onConflict: "graph_subscription_id" })
+
+    if (error) {
+      console.error("[SUBSCRIPTION] Failed to save to database:", error)
+    } else {
+      console.log("[SUBSCRIPTION] Saved to database:", subscription.id)
+    }
+  } catch (error) {
+    console.error("[SUBSCRIPTION] Database save error:", error)
+  }
+}
+
+// Helper to delete subscription from Supabase
+async function deleteSubscriptionFromDb(subscriptionId: string) {
+  try {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+      .from("subscriptions")
+      .delete()
+      .eq("graph_subscription_id", subscriptionId)
+
+    if (error) {
+      console.error("[SUBSCRIPTION] Failed to delete from database:", error)
+    } else {
+      console.log("[SUBSCRIPTION] Deleted from database:", subscriptionId)
+    }
+  } catch (error) {
+    console.error("[SUBSCRIPTION] Database delete error:", error)
+  }
 }
 
 export async function GET() {
@@ -107,6 +164,16 @@ export async function POST(request: NextRequest) {
 
       console.log(`[SUBSCRIPTION] Successfully created subscription: ${subscription.id}`)
       console.log(`[SUBSCRIPTION] Expires at: ${subscription.expirationDateTime}`)
+
+      // Save to Supabase database
+      await saveSubscriptionToDb({
+        id: subscription.id,
+        roomEmail,
+        resource: subscription.resource,
+        expiresAt: subscription.expirationDateTime,
+        notificationUrl: webhookUrl,
+        changeType: subscription.changeType
+      })
 
       return NextResponse.json({
         subscription: {
@@ -204,6 +271,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     await deleteSubscription(subscriptionId)
+
+    // Delete from Supabase database
+    await deleteSubscriptionFromDb(subscriptionId)
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -54,17 +54,22 @@ export async function POST(request: NextRequest) {
     // Process each notification asynchronously
     // Respond quickly to Microsoft Graph (they expect < 3 seconds)
     const processPromises = notifications.map(async (notification) => {
-      // Create idempotency key
+      // Create idempotency key - include a short time window to allow reprocessing
+      // Microsoft may send the same notification multiple times quickly
       const idempotencyKey = `${notification.subscriptionId}-${notification.resourceData.id}-${notification.changeType}`
 
-      // Check if already processed
-      if (processedEvents.has(idempotencyKey)) {
-        console.log(`Skipping duplicate notification: ${idempotencyKey}`)
+      // Check if already processed recently (within last 30 seconds)
+      const lastProcessed = processedEvents.get(idempotencyKey)
+      const thirtySecondsAgo = Date.now() - 30000
+
+      if (lastProcessed && lastProcessed > thirtySecondsAgo) {
+        console.log(`[WEBHOOK] Skipping duplicate notification (processed ${Math.round((Date.now() - lastProcessed) / 1000)}s ago): ${idempotencyKey}`)
         return
       }
 
       // Mark as processed
       processedEvents.set(idempotencyKey, Date.now())
+      console.log(`[WEBHOOK] Processing notification: ${idempotencyKey}`)
 
       // Clean up periodically
       if (processedEvents.size > 1000) {
@@ -74,9 +79,9 @@ export async function POST(request: NextRequest) {
       try {
         await processNotification(notification)
       } catch (error) {
-        console.error(`Error processing notification ${idempotencyKey}:`, error)
-        // Don't throw - we want to return 202 to Graph even if processing fails
-        // The event can be retried or handled via dead letter queue
+        console.error(`[WEBHOOK] Error processing notification ${idempotencyKey}:`, error)
+        // Remove from processed so it can be retried
+        processedEvents.delete(idempotencyKey)
       }
     })
 
@@ -115,6 +120,8 @@ async function processNotification(notification: GraphNotification) {
   // Check if custom notifications are enabled
   // Default to ENABLED if no settings exist (so notifications work out of the box)
   let customNotificationsEnabled = true
+  let sendAcceptanceNotifications = true
+  let sendDeclineNotifications = true
 
   try {
     const supabase = await createClient()
@@ -127,28 +134,39 @@ async function processNotification(notification: GraphNotification) {
       .single()
 
     // If room-specific setting exists, use it
-    if (roomSettings) {
+    if (roomSettings && roomSettings.custom_notifications_enabled !== null) {
       customNotificationsEnabled = roomSettings.custom_notifications_enabled
+      console.log(`[WEBHOOK] Room-specific setting found: customNotificationsEnabled = ${customNotificationsEnabled}`)
     } else {
-      // Check global setting
+      // Check global settings
       const { data: globalSettings } = await supabase
         .from("global_notification_settings")
-        .select("setting_value")
-        .eq("setting_key", "custom_notifications_enabled")
-        .single()
+        .select("setting_key, setting_value")
 
-      if (globalSettings?.setting_value?.enabled !== undefined) {
-        customNotificationsEnabled = globalSettings.setting_value.enabled
+      if (globalSettings && globalSettings.length > 0) {
+        for (const setting of globalSettings) {
+          if (setting.setting_key === "custom_notifications_enabled" && setting.setting_value?.enabled !== undefined) {
+            customNotificationsEnabled = setting.setting_value.enabled
+          }
+          if (setting.setting_key === "send_acceptance_notifications" && setting.setting_value?.enabled !== undefined) {
+            sendAcceptanceNotifications = setting.setting_value.enabled
+          }
+          if (setting.setting_key === "send_decline_notifications" && setting.setting_value?.enabled !== undefined) {
+            sendDeclineNotifications = setting.setting_value.enabled
+          }
+        }
+        console.log(`[WEBHOOK] Global settings: customNotificationsEnabled=${customNotificationsEnabled}, sendAcceptance=${sendAcceptanceNotifications}, sendDecline=${sendDeclineNotifications}`)
+      } else {
+        console.log(`[WEBHOOK] No settings found in database, using defaults (all enabled)`)
       }
-      // If no settings exist, keep default (enabled)
     }
   } catch (error) {
     // If database tables don't exist or query fails, default to enabled
-    console.log("Could not check notification settings, defaulting to enabled:", error)
+    console.log("[WEBHOOK] Could not check notification settings, defaulting to enabled:", error)
   }
 
   if (!customNotificationsEnabled) {
-    console.log(`Custom notifications disabled for room ${roomEmail}, skipping`)
+    console.log(`[WEBHOOK] Custom notifications disabled for room ${roomEmail}, skipping email`)
     return
   }
 
@@ -176,6 +194,10 @@ async function processNotification(notification: GraphNotification) {
   console.log(`[v0] Checking response status: ${event.responseStatus?.response}`)
 
   if (event.responseStatus?.response === "accepted") {
+    if (!sendAcceptanceNotifications) {
+      console.log(`[WEBHOOK] Event ACCEPTED but acceptance notifications are disabled, skipping`)
+      return
+    }
     console.log(`[WEBHOOK] Event ACCEPTED - preparing acceptance notification`)
     console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
 
@@ -203,6 +225,10 @@ async function processNotification(notification: GraphNotification) {
       console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
     }
   } else if (event.responseStatus?.response === "declined") {
+    if (!sendDeclineNotifications) {
+      console.log(`[WEBHOOK] Event DECLINED but decline notifications are disabled, skipping`)
+      return
+    }
     console.log(`[WEBHOOK] Event DECLINED - preparing decline notification`)
     console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
 
