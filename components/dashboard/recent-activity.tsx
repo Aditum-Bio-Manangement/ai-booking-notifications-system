@@ -16,11 +16,18 @@ interface RecentActivityProps {
 export function RecentActivity({ bookings, isLoading = false }: RecentActivityProps) {
   const { formatActivityTime } = useTimezone()
 
+  // Helper to safely parse date
+  const safeGetTime = (dateStr: string | undefined | null): number => {
+    if (!dateStr) return 0
+    const time = new Date(dateStr).getTime()
+    return isNaN(time) ? 0 : time
+  }
+
   // Sort by most recent activity - use notificationTime if available, otherwise createdAt
   const sortedBookings = [...bookings]
     .sort((a, b) => {
-      const timeA = a.notificationTime ? new Date(a.notificationTime).getTime() : new Date(a.createdAt).getTime()
-      const timeB = b.notificationTime ? new Date(b.notificationTime).getTime() : new Date(b.createdAt).getTime()
+      const timeA = safeGetTime(a.notificationTime) || safeGetTime(a.createdAt)
+      const timeB = safeGetTime(b.notificationTime) || safeGetTime(b.createdAt)
       return timeB - timeA
     })
     .slice(0, 6)

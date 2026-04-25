@@ -63,12 +63,12 @@ export function SystemHealthPanel({ health, subscriptions, processingCount = 0, 
               System Health
             </CardTitle>
             {onRefresh && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={handleRefresh} 
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="h-8 w-8" 
+                className="h-8 w-8"
                 title="Refresh"
               >
                 <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -95,7 +95,9 @@ export function SystemHealthPanel({ health, subscriptions, processingCount = 0, 
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Last processed: {format(new Date(health.lastProcessedTime), "h:mm:ss a")}
+                Last processed: {health.lastProcessedTime && !isNaN(new Date(health.lastProcessedTime).getTime())
+                  ? format(new Date(health.lastProcessedTime), "h:mm:ss a")
+                  : "N/A"}
               </p>
             </div>
 
@@ -119,11 +121,10 @@ export function SystemHealthPanel({ health, subscriptions, processingCount = 0, 
                   Dead Letter
                 </div>
                 <span
-                  className={`text-lg font-semibold ${
-                    health.deadLetterCount > 0
+                  className={`text-lg font-semibold ${health.deadLetterCount > 0
                       ? "text-[oklch(0.65_0.2_25)]"
                       : "text-foreground"
-                  }`}
+                    }`}
                 >
                   {health.deadLetterCount}
                 </span>
@@ -192,7 +193,9 @@ export function SystemHealthPanel({ health, subscriptions, processingCount = 0, 
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">Expires</p>
                     <p className="text-sm text-foreground">
-                      {format(new Date(sub.expirationDateTime), "MMM d, h:mm a")}
+                      {sub.expirationDateTime && !isNaN(new Date(sub.expirationDateTime).getTime())
+                        ? format(new Date(sub.expirationDateTime), "MMM d, h:mm a")
+                        : "Unknown"}
                     </p>
                   </div>
                   <Badge

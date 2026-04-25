@@ -72,12 +72,19 @@ export function SendHistoryTable({ bookings, isLoading = false, onRefresh }: Sen
     }
   }
 
+  // Helper to safely parse date
+  const safeGetTime = (dateStr: string | undefined | null): number => {
+    if (!dateStr) return 0
+    const time = new Date(dateStr).getTime()
+    return isNaN(time) ? 0 : time
+  }
+
   // Only show bookings with notifications sent, sorted by notification time
   const sentBookings = bookings
     .filter((b): b is BookingEvent => b != null && b.notificationSent)
     .sort((a, b) => {
-      const timeA = a.notificationTime ? new Date(a.notificationTime).getTime() : 0
-      const timeB = b.notificationTime ? new Date(b.notificationTime).getTime() : 0
+      const timeA = safeGetTime(a.notificationTime)
+      const timeB = safeGetTime(b.notificationTime)
       return timeB - timeA // Newest first
     })
 

@@ -122,10 +122,17 @@ export function BookingsTable({ bookings, isLoading = false, onRefresh }: Bookin
   // Filter out any null/undefined bookings first
   const validBookings = Array.isArray(bookings) ? bookings.filter((b): b is BookingEvent => b != null) : []
 
+  // Helper to safely parse date
+  const safeGetTime = (dateStr: string | undefined | null): number => {
+    if (!dateStr) return 0
+    const time = new Date(dateStr).getTime()
+    return isNaN(time) ? 0 : time
+  }
+
   // Sort by most recent first, then filter
   const sortedBookings = [...validBookings].sort((a, b) => {
-    const timeA = a.notificationTime ? new Date(a.notificationTime).getTime() : new Date(a.createdAt).getTime()
-    const timeB = b.notificationTime ? new Date(b.notificationTime).getTime() : new Date(b.createdAt).getTime()
+    const timeA = safeGetTime(a.notificationTime) || safeGetTime(a.createdAt)
+    const timeB = safeGetTime(b.notificationTime) || safeGetTime(b.createdAt)
     return timeB - timeA
   })
 

@@ -376,15 +376,27 @@ export function SettingsPanel() {
     setSaveStatus("idle")
 
     try {
+      // Save to localStorage for quick loading
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
 
-      // In a real app, also save to server
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      // Save to database via API
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings })
+      })
 
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to save settings")
+      }
+
+      console.log("[SETTINGS] Settings saved to database successfully")
       setSaveStatus("success")
       setHasChanges(false)
       setTimeout(() => setSaveStatus("idle"), 3000)
-    } catch {
+    } catch (error) {
+      console.error("Failed to save settings:", error)
       setSaveStatus("error")
     } finally {
       setIsSaving(false)
@@ -598,9 +610,11 @@ export function SettingsPanel() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {subsData.subscriptions.map((sub, index) => {
-                      const expiresAt = new Date(sub.expiresAt)
-                      const isExpired = expiresAt < new Date()
-                      const expiresIn = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)))
+                      const expiresAtTime = sub.expiresAt ? new Date(sub.expiresAt).getTime() : 0
+                      const isValidDate = !isNaN(expiresAtTime) && expiresAtTime > 0
+                      const expiresAt = isValidDate ? new Date(sub.expiresAt) : new Date()
+                      const isExpired = isValidDate ? expiresAt < new Date() : true
+                      const expiresIn = isValidDate ? Math.max(0, Math.floor((expiresAtTime - Date.now()) / (1000 * 60 * 60))) : 0
 
                       return (
                         <div

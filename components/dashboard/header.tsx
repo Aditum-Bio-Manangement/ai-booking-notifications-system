@@ -138,7 +138,10 @@ export function DashboardHeader({ onSettingsClick, onMenuToggle, bookings = [] }
   }
 
   const formatTimestamp = (timestamp: string) => {
+    if (!timestamp) return "Unknown"
     const date = new Date(timestamp)
+    if (isNaN(date.getTime())) return "Unknown"
+
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / (1000 * 60))
