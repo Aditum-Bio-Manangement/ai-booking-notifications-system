@@ -5,7 +5,25 @@ import {
   listSubscriptions,
   renewSubscription,
 } from "@/lib/microsoft-graph"
-import { createClient } from "@/lib/supabase/server"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+
+// Create admin client that bypasses RLS
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error("[SUBSCRIPTION] Missing Supabase credentials")
+    return null
+  }
+
+  return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
 
 // In-memory storage for mock subscriptions (in production, use a database)
 let mockSubscriptions: Array<{
@@ -34,7 +52,11 @@ async function saveSubscriptionToDb(subscription: {
   changeType?: string
 }) {
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseAdmin()
+    if (!supabase) {
+      console.error("[SUBSCRIPTION] Supabase admin client not available")
+      return
+    }
 
     const { error } = await supabase
       .from("subscriptions")
@@ -44,10 +66,6 @@ async function saveSubscriptionToDb(subscription: {
         room_name: subscription.roomEmail.split("@")[0], // Extract room name from email
         resource: subscription.resource,
         change_type: subscription.changeType || "created,updated,deleted",
-        notification_url: subscription.notificationUrl,
-        expiration_date: subscription.expiresAt,
-        status: "active",
-        updated_at: new Date().toISOString()
       }, { onConflict: "graph_subscription_id" })
 
     if (error) {
@@ -63,7 +81,11 @@ async function saveSubscriptionToDb(subscription: {
 // Helper to delete subscription from Supabase
 async function deleteSubscriptionFromDb(subscriptionId: string) {
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseAdmin()
+    if (!supabase) {
+      console.error("[SUBSCRIPTION] Supabase admin client not available")
+      return
+    }
 
     const { error } = await supabase
       .from("subscriptions")
