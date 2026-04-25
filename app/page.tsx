@@ -482,18 +482,17 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="rounded-lg border border-border bg-card p-6">
-              <h3 className="font-medium text-foreground">Contact Support</h3>
+              <h3 className="font-medium text-foreground">Contact IT Support</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                For technical issues, contact the IT Service Desk or reach out to the
-                Facilities team for room-specific questions.
+                For technical issues or questions about the Room Booking Notification System, please contact IT Support.
               </p>
-              <div className="mt-4 flex flex-col gap-2">
-                <p className="text-sm text-foreground">
-                  IT Service Desk: servicedesk@aditumbio.com
-                </p>
-                <p className="text-sm text-foreground">
-                  Facilities: facilities@aditumbio.com
-                </p>
+              <div className="mt-4">
+                <a
+                  href="mailto:itsupport@aditumbio.com"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  itsupport@aditumbio.com
+                </a>
               </div>
             </div>
           </div>

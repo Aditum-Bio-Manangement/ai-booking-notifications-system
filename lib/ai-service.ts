@@ -5,9 +5,11 @@ import type { Room, BookingEvent, Site } from "./types"
 // Policy snippets for retrieval-first prompting
 const policySnippets = {
   conflict: "This room was already booked for the requested time slot. Exchange does not allow double-booking.",
+  policy: "This booking was declined due to a room policy violation.",
   capacity: "The requested room capacity does not meet your meeting requirements.",
   outsideHours: "Booking was requested outside of permitted building hours.",
   restrictedRoom: "This room is restricted to certain groups or requires special approval.",
+  restricted: "This room is restricted to certain groups or requires special approval.",
   advanceBooking: "This booking exceeds the maximum advance booking window.",
 }
 
@@ -78,12 +80,12 @@ export async function generateRoomSuggestions(
   allRooms: Room[]
 ): Promise<{ suggestions: z.infer<typeof roomSuggestionSchema>; aiAvailable: boolean }> {
   const requestedRoom = allRooms.find(r => r.id === declinedBooking.roomId)
-  
+
   // Filter rooms at the same site with similar or greater capacity
   const candidateRooms = availableRooms
     .filter(r => r.site === declinedBooking.site && r.isActive)
     .slice(0, 5) // Limit to top 5 candidates
-  
+
   if (candidateRooms.length === 0) {
     return {
       suggestions: {
@@ -209,7 +211,7 @@ export async function generateAVGuidance(
   // Build context from approved snippets only
   const avFeatures = room.avProfile.toLowerCase()
   const relevantSnippets: string[] = []
-  
+
   if (avFeatures.includes("video")) relevantSnippets.push(avGuidanceSnippets.videoConference)
   if (avFeatures.includes("audio")) relevantSnippets.push(avGuidanceSnippets.audioConference)
   if (avFeatures.includes("display")) relevantSnippets.push(avGuidanceSnippets.display)
@@ -295,7 +297,7 @@ Webhook failures in last hour: ${webhookFailures}
 Webhook issue detected: ${webhookIssue}
 
 Site statistics:
-${siteStats.map(s => `- ${s.site}: ${s.declines}/${s.total} declines (${((s.declines/s.total)*100).toFixed(1)}%)`).join("\n")}
+${siteStats.map(s => `- ${s.site}: ${s.declines}/${s.total} declines (${((s.declines / s.total) * 100).toFixed(1)}%)`).join("\n")}
 Site drift detected: ${siteDrift}
 
 Recent booking outcomes:
@@ -310,7 +312,7 @@ Identify any anomalies and recommend actions.`,
   } catch {
     // Deterministic fallback
     const anomalies: z.infer<typeof anomalySchema>["anomalies"] = []
-    
+
     if (declineSpike) {
       anomalies.push({
         type: "decline_spike",
@@ -321,7 +323,7 @@ Identify any anomalies and recommend actions.`,
         recommendation: "Review recent policy changes or room availability issues.",
       })
     }
-    
+
     if (webhookIssue) {
       anomalies.push({
         type: "webhook_failure",
@@ -347,10 +349,10 @@ Identify any anomalies and recommend actions.`,
     return {
       analysis: {
         anomalies,
-        overallHealth: anomalies.some(a => a.severity === "critical") 
-          ? "critical" 
-          : anomalies.length > 0 
-            ? "attention_needed" 
+        overallHealth: anomalies.some(a => a.severity === "critical")
+          ? "critical"
+          : anomalies.length > 0
+            ? "attention_needed"
             : "healthy",
       },
       aiAvailable: false,
