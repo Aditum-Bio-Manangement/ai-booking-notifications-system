@@ -239,10 +239,10 @@ async function processNotification(notification: GraphNotification) {
   // Check if the event is canceled - skip sending confirmation emails for canceled events
   // Microsoft sends "updated" notifications when events are canceled, not "deleted"
   // The event may have isCancelled=true or the subject may start with "Canceled:"
-  const isCanceled = event.isCancelled === true || 
+  const isCanceled = event.isCancelled === true ||
     event.subject?.toLowerCase().startsWith("canceled:") ||
     event.subject?.toLowerCase().startsWith("cancelled:")
-  
+
   if (isCanceled) {
     console.log(`[WEBHOOK] Event is CANCELED - skipping notification email`)
     return
@@ -354,6 +354,8 @@ async function processNotification(notification: GraphNotification) {
     }
     console.log(`[WEBHOOK] Event ACCEPTED - preparing acceptance notification`)
     console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
+    console.log(`[WEBHOOK] Event timezone from Graph: "${event.start.timeZone}"`)
+    console.log(`[WEBHOOK] Event start dateTime: "${event.start.dateTime}"`)
 
     // Send acceptance notification
     const htmlContent = renderAcceptedEmail({
@@ -362,7 +364,7 @@ async function processNotification(notification: GraphNotification) {
       subject: event.subject,
       startTime: event.start.dateTime,
       endTime: event.end.dateTime,
-      timeZone: event.start.timeZone,
+      timeZone: event.start.timeZone || "America/New_York",
     })
 
     try {

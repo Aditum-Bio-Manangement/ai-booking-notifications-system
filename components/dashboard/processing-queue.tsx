@@ -60,9 +60,7 @@ interface ProcessingQueueProps {
   isLoading?: boolean
 }
 
-// NOTE: This generates SIMULATED job data from bookings for UI demonstration
-// In production, this should be replaced with actual webhook event tracking
-// stored in the database as real webhook notifications are processed
+// Generate job data from booking, showing REAL status based on notificationSent
 function generateJobFromBooking(booking: BookingEvent): QueueJob {
   // Safely parse createdAt with fallback to current time if invalid
   const createdAtDate = booking.createdAt ? new Date(booking.createdAt) : new Date()
@@ -71,8 +69,23 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
     ? booking.createdAt
     : new Date().toISOString()
 
-  const isRecent = createdAtTime > Date.now() - 60000 // Last minute
-  const isProcessing = isRecent && Math.random() > 0.7
+  // Determine actual status based on real booking data
+  const isPending = booking.outcome === "pending"
+  const isCanceled = booking.outcome === "canceled"
+  const emailWasSent = booking.notificationSent === true
+  const emailShouldBeSent = !isPending && !isCanceled && (booking.outcome === "accepted" || booking.outcome === "declined-conflict" || booking.outcome === "declined-policy")
+
+  // Determine step statuses based on actual state
+  const decisionStatus: "completed" | "in-progress" | "pending" | "failed" = isPending ? "pending" : "completed"
+  const templateStatus: "completed" | "in-progress" | "pending" | "failed" =
+    isPending ? "pending" :
+      isCanceled ? "completed" :
+        emailWasSent ? "completed" : "in-progress"
+  const sendStatus: "completed" | "in-progress" | "pending" | "failed" =
+    isPending ? "pending" :
+      isCanceled ? "completed" :
+        emailWasSent ? "completed" :
+          emailShouldBeSent ? "pending" : "completed"
 
   const baseSteps: ProcessingStep[] = [
     {
@@ -87,55 +100,75 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
     {
       id: "validate",
       name: "Validate Request",
-      status: "completed",
+      status: isPending ? "in-progress" : "completed",
       startTime: new Date(createdAtTime + 50).toISOString(),
-      endTime: new Date(createdAtTime + 150).toISOString(),
-      duration: 100,
+      endTime: isPending ? undefined : new Date(createdAtTime + 150).toISOString(),
+      duration: isPending ? undefined : 100,
       details: "Validated organizer, room availability, and policy compliance",
     },
     {
       id: "policy",
       name: "Policy Check",
-      status: "completed",
-      startTime: new Date(createdAtTime + 150).toISOString(),
-      endTime: new Date(createdAtTime + 300).toISOString(),
-      duration: 150,
+      status: isPending ? "pending" : "completed",
+      startTime: isPending ? undefined : new Date(createdAtTime + 150).toISOString(),
+      endTime: isPending ? undefined : new Date(createdAtTime + 300).toISOString(),
+      duration: isPending ? undefined : 150,
       details: booking.outcome === "accepted"
         ? "All policies passed"
         : booking.outcome === "declined-conflict"
           ? "Conflict detected with existing booking"
-          : "Policy violation detected",
+          : booking.outcome === "canceled"
+            ? "Booking was canceled"
+            : "Policy violation detected",
     },
     {
       id: "decision",
       name: "Booking Decision",
-      status: "completed",
-      startTime: new Date(createdAtTime + 300).toISOString(),
-      endTime: new Date(createdAtTime + 350).toISOString(),
-      duration: 50,
-      details: `Decision: ${booking.outcome === "accepted" ? "Accept" : "Decline"} booking`,
+      status: decisionStatus,
+      startTime: isPending ? undefined : new Date(createdAtTime + 300).toISOString(),
+      endTime: isPending ? undefined : new Date(createdAtTime + 350).toISOString(),
+      duration: isPending ? undefined : 50,
+      details: isPending
+        ? "Awaiting room response"
+        : isCanceled
+          ? "Booking canceled by organizer"
+          : `Decision: ${booking.outcome === "accepted" ? "Accept" : "Decline"} booking`,
     },
     {
       id: "template",
       name: "Generate Email",
-      status: isProcessing ? "in-progress" : "completed",
-      startTime: new Date(createdAtTime + 350).toISOString(),
-      endTime: isProcessing ? undefined : new Date(createdAtTime + 500).toISOString(),
-      duration: isProcessing ? undefined : 150,
-      details: "Rendering email template with booking details",
+      status: templateStatus,
+      startTime: (isPending || isCanceled) ? undefined : new Date(createdAtTime + 350).toISOString(),
+      endTime: (isPending || !emailWasSent) ? undefined : new Date(createdAtTime + 500).toISOString(),
+      duration: emailWasSent ? 150 : undefined,
+      details: isCanceled
+        ? "No email needed for canceled booking"
+        : emailWasSent
+          ? "Email template rendered"
+          : "Waiting to generate email",
     },
     {
       id: "send",
       name: "Send Notification",
-      // Only show as "failed" if there was an actual error, not just because notification wasn't sent
-      // Most bookings will have notificationSent=true once processed
-      status: isProcessing ? "pending" : "completed",
-      startTime: isProcessing ? undefined : new Date(createdAtTime + 500).toISOString(),
-      endTime: isProcessing ? undefined : booking.notificationTime || new Date(createdAtTime + 800).toISOString(),
-      duration: isProcessing ? undefined : 300,
-      details: `Email sent to ${booking.organizerEmail}`,
+      status: sendStatus,
+      startTime: emailWasSent ? new Date(createdAtTime + 500).toISOString() : undefined,
+      endTime: emailWasSent ? (booking.notificationTime || new Date(createdAtTime + 800).toISOString()) : undefined,
+      duration: emailWasSent ? 300 : undefined,
+      details: isCanceled
+        ? "No notification for canceled booking"
+        : emailWasSent
+          ? `Email sent to ${booking.organizerEmail}`
+          : `Pending: Email to ${booking.organizerEmail}`,
     },
   ]
+
+  // Determine overall job status based on actual booking state
+  let jobStatus: "processing" | "completed" | "failed" = "completed"
+  if (isPending) {
+    jobStatus = "processing"
+  } else if (!isCanceled && emailShouldBeSent && !emailWasSent) {
+    jobStatus = "processing" // Still waiting for email to be sent
+  }
 
   return {
     id: `job-${booking.id}`,
@@ -146,10 +179,9 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
     roomName: booking.roomName,
     site: booking.site,
     outcome: booking.outcome === "accepted" ? "accepted" : booking.outcome === "pending" ? "pending" : "declined",
-    // Jobs are either processing or completed - we don't have real failure tracking yet
-    status: isProcessing ? "processing" : "completed",
+    status: jobStatus,
     createdAt: booking.createdAt,
-    completedAt: isProcessing ? undefined : booking.notificationTime || booking.createdAt,
+    completedAt: jobStatus === "completed" ? (booking.notificationTime || booking.createdAt) : undefined,
     steps: baseSteps,
     retryCount: 0,
     priority: "normal",

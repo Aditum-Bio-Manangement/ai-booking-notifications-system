@@ -247,21 +247,86 @@ export interface EmailTemplateData {
 // Map common Microsoft timezone IDs to IANA timezone names
 const timezoneMap: Record<string, string> = {
   "Eastern Standard Time": "America/New_York",
+  "Eastern Daylight Time": "America/New_York",
   "Pacific Standard Time": "America/Los_Angeles",
+  "Pacific Daylight Time": "America/Los_Angeles",
   "Central Standard Time": "America/Chicago",
+  "Central Daylight Time": "America/Chicago",
   "Mountain Standard Time": "America/Denver",
+  "Mountain Daylight Time": "America/Denver",
   "UTC": "UTC",
   "GMT": "UTC",
+  "Coordinated Universal Time": "UTC",
 }
 
 function formatDateTime(isoString: string, timeZone: string) {
-  const date = new Date(isoString)
+  // Microsoft Graph returns dateTime WITHOUT timezone info (e.g., "2026-04-25T02:30:00.0000000")
+  // The timezone is provided separately in the timeZone field
+  // We need to interpret the dateTime as being in the specified timezone
 
   // Convert Microsoft timezone ID to IANA if needed
-  const ianaTimezone = timezoneMap[timeZone] || timeZone
+  const ianaTimezone = timezoneMap[timeZone] || timeZone || "America/New_York"
 
-  // Try to format in the specified timezone, fall back to UTC if invalid
+  // Parse the datetime string - if it doesn't have Z or offset, it's a local time in the specified timezone
+  let dateStr = isoString
+
+  // Remove trailing zeros from milliseconds if present (Microsoft format)
+  dateStr = dateStr.replace(/\.0+$/, "")
+
+  // If the string doesn't have timezone info, we need to interpret it in the specified timezone
+  // Create a date by appending the timezone offset would be complex, so we use a different approach:
+  // Format directly using the timezone, treating the input as a local time representation
+
+  const hasTimezone = dateStr.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateStr)
+
   try {
+    let date: Date
+
+    if (hasTimezone) {
+      // If it has timezone info, parse normally
+      date = new Date(dateStr)
+    } else {
+      // If no timezone info, the datetime represents local time in the specified timezone
+      // We need to parse it as-is and format it without conversion
+      // Create date parts from the string
+      const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+      if (match) {
+        const [, year, month, day, hour, minute] = match
+
+        // Format directly without Date object conversion issues
+        const dateObj = new Date(Date.UTC(
+          parseInt(year),
+          parseInt(month) - 1,
+          parseInt(day),
+          parseInt(hour),
+          parseInt(minute)
+        ))
+
+        // Since we put it in UTC, format in UTC to get the exact values back
+        const dateOptions: Intl.DateTimeFormatOptions = {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          timeZone: "UTC",
+        }
+
+        const timeOptions: Intl.DateTimeFormatOptions = {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "UTC",
+        }
+
+        return {
+          date: dateObj.toLocaleDateString("en-US", dateOptions),
+          time: dateObj.toLocaleTimeString("en-US", timeOptions),
+        }
+      }
+      // Fallback
+      date = new Date(dateStr)
+    }
+
     const dateOptions: Intl.DateTimeFormatOptions = {
       weekday: "long",
       year: "numeric",
@@ -284,8 +349,8 @@ function formatDateTime(isoString: string, timeZone: string) {
   } catch {
     // Fall back to date-fns UTC formatting if timezone is invalid
     return {
-      date: format(date, "EEEE, MMMM d, yyyy"),
-      time: format(date, "h:mm a"),
+      date: format(new Date(isoString), "EEEE, MMMM d, yyyy"),
+      time: format(new Date(isoString), "h:mm a"),
     }
   }
 }
