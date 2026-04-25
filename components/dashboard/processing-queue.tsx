@@ -64,7 +64,14 @@ interface ProcessingQueueProps {
 // In production, this should be replaced with actual webhook event tracking
 // stored in the database as real webhook notifications are processed
 function generateJobFromBooking(booking: BookingEvent): QueueJob {
-  const isRecent = new Date(booking.createdAt).getTime() > Date.now() - 60000 // Last minute
+  // Safely parse createdAt with fallback to current time if invalid
+  const createdAtDate = booking.createdAt ? new Date(booking.createdAt) : new Date()
+  const createdAtTime = isNaN(createdAtDate.getTime()) ? Date.now() : createdAtDate.getTime()
+  const safeCreatedAt = booking.createdAt && !isNaN(new Date(booking.createdAt).getTime())
+    ? booking.createdAt
+    : new Date().toISOString()
+
+  const isRecent = createdAtTime > Date.now() - 60000 // Last minute
   const isProcessing = isRecent && Math.random() > 0.7
 
   const baseSteps: ProcessingStep[] = [
@@ -72,8 +79,8 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
       id: "receive",
       name: "Event Received",
       status: "completed",
-      startTime: booking.createdAt,
-      endTime: new Date(new Date(booking.createdAt).getTime() + 50).toISOString(),
+      startTime: safeCreatedAt,
+      endTime: new Date(createdAtTime + 50).toISOString(),
       duration: 50,
       details: "Webhook received from Microsoft Graph",
     },
@@ -81,8 +88,8 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
       id: "validate",
       name: "Validate Request",
       status: "completed",
-      startTime: new Date(new Date(booking.createdAt).getTime() + 50).toISOString(),
-      endTime: new Date(new Date(booking.createdAt).getTime() + 150).toISOString(),
+      startTime: new Date(createdAtTime + 50).toISOString(),
+      endTime: new Date(createdAtTime + 150).toISOString(),
       duration: 100,
       details: "Validated organizer, room availability, and policy compliance",
     },
@@ -90,8 +97,8 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
       id: "policy",
       name: "Policy Check",
       status: "completed",
-      startTime: new Date(new Date(booking.createdAt).getTime() + 150).toISOString(),
-      endTime: new Date(new Date(booking.createdAt).getTime() + 300).toISOString(),
+      startTime: new Date(createdAtTime + 150).toISOString(),
+      endTime: new Date(createdAtTime + 300).toISOString(),
       duration: 150,
       details: booking.outcome === "accepted"
         ? "All policies passed"
@@ -103,8 +110,8 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
       id: "decision",
       name: "Booking Decision",
       status: "completed",
-      startTime: new Date(new Date(booking.createdAt).getTime() + 300).toISOString(),
-      endTime: new Date(new Date(booking.createdAt).getTime() + 350).toISOString(),
+      startTime: new Date(createdAtTime + 300).toISOString(),
+      endTime: new Date(createdAtTime + 350).toISOString(),
       duration: 50,
       details: `Decision: ${booking.outcome === "accepted" ? "Accept" : "Decline"} booking`,
     },
@@ -112,8 +119,8 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
       id: "template",
       name: "Generate Email",
       status: isProcessing ? "in-progress" : "completed",
-      startTime: new Date(new Date(booking.createdAt).getTime() + 350).toISOString(),
-      endTime: isProcessing ? undefined : new Date(new Date(booking.createdAt).getTime() + 500).toISOString(),
+      startTime: new Date(createdAtTime + 350).toISOString(),
+      endTime: isProcessing ? undefined : new Date(createdAtTime + 500).toISOString(),
       duration: isProcessing ? undefined : 150,
       details: "Rendering email template with booking details",
     },
@@ -123,8 +130,8 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
       // Only show as "failed" if there was an actual error, not just because notification wasn't sent
       // Most bookings will have notificationSent=true once processed
       status: isProcessing ? "pending" : "completed",
-      startTime: isProcessing ? undefined : new Date(new Date(booking.createdAt).getTime() + 500).toISOString(),
-      endTime: isProcessing ? undefined : booking.notificationTime || new Date(new Date(booking.createdAt).getTime() + 800).toISOString(),
+      startTime: isProcessing ? undefined : new Date(createdAtTime + 500).toISOString(),
+      endTime: isProcessing ? undefined : booking.notificationTime || new Date(createdAtTime + 800).toISOString(),
       duration: isProcessing ? undefined : 300,
       details: `Email sent to ${booking.organizerEmail}`,
     },
@@ -352,7 +359,9 @@ export function ProcessingQueue({ bookings, isLoading = false }: ProcessingQueue
       // Processing first, then by time
       if (a.status === "processing" && b.status !== "processing") return -1
       if (b.status === "processing" && a.status !== "processing") return 1
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return (isNaN(bTime) ? 0 : bTime) - (isNaN(aTime) ? 0 : aTime)
     })
 
   const filteredJobs = jobs.filter(job => {
