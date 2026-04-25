@@ -90,10 +90,10 @@ export function DashboardHeader({ onSettingsClick, onMenuToggle, bookings = [] }
         .map((booking) => ({
           id: booking.id,
           type: booking.outcome === "accepted" ? "accepted" : "declined" as AppNotification["type"],
-          title: booking.outcome === "accepted" ? "Booking Confirmed" : "Booking Declined",
+          title: booking.subject || "Meeting",
           message: booking.outcome === "accepted"
-            ? `${booking.subject} confirmed for ${booking.roomName}`
-            : `${booking.subject} declined for ${booking.roomName}`,
+            ? `${booking.organizer} - ${booking.roomName} confirmed`
+            : `${booking.organizer} - ${booking.roomName} declined`,
           timestamp: booking.createdAt,
           read: readNotificationIds.has(booking.id),
           roomName: booking.roomName,

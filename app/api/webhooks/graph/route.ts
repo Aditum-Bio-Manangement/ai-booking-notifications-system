@@ -279,11 +279,16 @@ async function processNotification(notification: GraphNotification) {
       const retryAcceptTimezone = await getUserTimezone(organizerEmail)
       const htmlContent = renderAcceptedEmail({
         organizerName: updatedEvent.organizer.emailAddress.name,
+        organizerEmail,
         roomName,
         subject: updatedEvent.subject,
         startTime: updatedEvent.start.dateTime,
         endTime: updatedEvent.end.dateTime,
         timeZone: retryAcceptTimezone,
+        attendees: updatedEvent.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
+          name: a.emailAddress.name,
+          email: a.emailAddress.address,
+        })),
       })
 
       try {
@@ -316,12 +321,17 @@ async function processNotification(notification: GraphNotification) {
       const retryDeclineTimezone = await getUserTimezone(organizerEmail)
       const htmlContent = renderDeclinedEmail({
         organizerName: updatedEvent.organizer.emailAddress.name,
+        organizerEmail,
         roomName,
         subject: updatedEvent.subject,
         startTime: updatedEvent.start.dateTime,
         endTime: updatedEvent.end.dateTime,
         timeZone: retryDeclineTimezone,
         reason: "The room has a scheduling conflict with an existing booking.",
+        attendees: updatedEvent.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
+          name: a.emailAddress.name,
+          email: a.emailAddress.address,
+        })),
       })
 
       try {
@@ -366,11 +376,16 @@ async function processNotification(notification: GraphNotification) {
     // Send acceptance notification using organizer's timezone
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
+      organizerEmail,
       roomName,
       subject: event.subject,
       startTime: event.start.dateTime,
       endTime: event.end.dateTime,
       timeZone: organizerTimezone,
+      attendees: event.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
+        name: a.emailAddress.name,
+        email: a.emailAddress.address,
+      })),
     })
 
     try {
@@ -408,12 +423,17 @@ async function processNotification(notification: GraphNotification) {
     // Send decline notification using organizer's timezone
     const htmlContent = renderDeclinedEmail({
       organizerName: event.organizer.emailAddress.name,
+      organizerEmail,
       roomName,
       subject: event.subject,
       startTime: event.start.dateTime,
       endTime: event.end.dateTime,
       timeZone: organizerTimezoneDecline,
       reason: "The room has a scheduling conflict with an existing booking.",
+      attendees: event.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
+        name: a.emailAddress.name,
+        email: a.emailAddress.address,
+      })),
     })
 
     try {
@@ -446,11 +466,16 @@ async function processNotification(notification: GraphNotification) {
     const tentativeTimezone = await getUserTimezone(organizerEmail)
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
+      organizerEmail,
       roomName,
       subject: event.subject,
       startTime: event.start.dateTime,
       endTime: event.end.dateTime,
       timeZone: tentativeTimezone,
+      attendees: event.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
+        name: a.emailAddress.name,
+        email: a.emailAddress.address,
+      })),
     })
 
     try {

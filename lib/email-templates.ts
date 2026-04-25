@@ -81,9 +81,16 @@ export const defaultTemplates = {
                         </td>
                       </tr>
                       <tr>
-                        <td style="padding-top: 16px;">
+                        <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
                           <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Time</p>
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top: 16px;">
+                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Organizer</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{organizerName}}</p>
+                          {{attendeesSection}}
                         </td>
                       </tr>
                     </table>
@@ -204,9 +211,16 @@ export const defaultTemplates = {
                         </td>
                       </tr>
                       <tr>
-                        <td style="padding-top: 16px;">
+                        <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
                           <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Time</p>
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top: 16px;">
+                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Organizer</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{organizerName}}</p>
+                          {{attendeesSection}}
                         </td>
                       </tr>
                     </table>
@@ -247,6 +261,7 @@ export const defaultTemplates = {
 
 export interface EmailTemplateData {
   organizerName: string
+  organizerEmail?: string
   roomName: string
   subject: string
   startTime: string
@@ -254,6 +269,7 @@ export interface EmailTemplateData {
   timeZone: string
   reason?: string
   logoUrl?: string
+  attendees?: Array<{ name: string; email: string }>
 }
 
 // Map common Microsoft timezone IDs to IANA timezone names
@@ -355,6 +371,21 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
   const logoUrl = data.logoUrl || process.env.LOGO_URL || "https://ai-booking-notifications-system.onrender.com/images/aditum-logo-horizontal.png"
   const timezoneDisplay = getTimezoneDisplayName(data.timeZone)
 
+  // Generate attendees section HTML if attendees exist
+  let attendeesSection = ""
+  if (data.attendees && data.attendees.length > 0) {
+    const attendeeNames = data.attendees
+      .filter(a => a.email !== data.organizerEmail) // Exclude organizer from attendees list
+      .map(a => a.name || a.email)
+      .slice(0, 5) // Limit to 5 attendees shown
+
+    if (attendeeNames.length > 0) {
+      const moreCount = data.attendees.length - 5
+      const attendeeText = attendeeNames.join(", ") + (moreCount > 0 ? ` +${moreCount} more` : "")
+      attendeesSection = `<p style="margin: 8px 0 0; color: #64748b; font-size: 14px;">Attendees: ${attendeeText}</p>`
+    }
+  }
+
   return template
     .replace(/\{\{organizerName\}\}/g, data.organizerName)
     .replace(/\{\{roomName\}\}/g, data.roomName)
@@ -365,6 +396,7 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
     .replace(/\{\{timeZone\}\}/g, timezoneDisplay)
     .replace(/\{\{reason\}\}/g, data.reason || "")
     .replace(/\{\{logoUrl\}\}/g, logoUrl)
+    .replace(/\{\{attendeesSection\}\}/g, attendeesSection)
 }
 
 export function renderAcceptedEmail(data: EmailTemplateData): string {

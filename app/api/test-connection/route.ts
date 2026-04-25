@@ -36,7 +36,7 @@ export async function GET() {
 
   return NextResponse.json({
     status: allPassed ? "connected" : "error",
-    message: allPassed 
+    message: allPassed
       ? `Successfully connected to Microsoft Graph. Found ${results.graphApiAccess.roomCount} room mailboxes.`
       : "Connection test failed. See details below.",
     details: results,
@@ -44,7 +44,7 @@ export async function GET() {
       "1. Verify the AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET are correct",
       "2. Ensure the app registration has the following Application permissions:",
       "   - Calendars.Read",
-      "   - Place.Read.All", 
+      "   - Place.Read.All",
       "   - Mail.Send",
       "   - User.Read.All",
       "3. Grant admin consent: Azure Portal → App registrations → Your app → API permissions → Grant admin consent",
