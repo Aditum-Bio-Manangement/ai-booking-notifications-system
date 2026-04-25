@@ -19,10 +19,10 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #4169E1 0%, #3DD6D0 100%); padding: 24px 32px;" bgcolor="#4169E1">
+            <td style="background: linear-gradient(135deg, #425cc7 0%, #19d3c5 100%); padding: 24px 32px;" bgcolor="#425cc7">
               <!--[if mso]>
               <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;">
-              <v:fill type="gradient" color="#3DD6D0" color2="#4169E1" angle="135"/>
+              <v:fill type="gradient" color="#19d3c5" color2="#425cc7" angle="135"/>
               <v:textbox inset="0,0,0,0">
               <![endif]-->
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
@@ -45,11 +45,11 @@ export const defaultTemplates = {
           <!-- Content -->
           <tr>
             <td style="padding: 32px;">
-              <p style="margin: 0 0 24px; color: #1E3A5F; font-size: 16px; line-height: 1.6;">
+              <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
                 Hi {{organizerName}},
               </p>
               
-              <p style="margin: 0 0 24px; color: #1E3A5F; font-size: 16px; line-height: 1.6;">
+              <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
                 Great news! Your room booking has been confirmed.
               </p>
               
@@ -61,7 +61,7 @@ export const defaultTemplates = {
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
                           <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Meeting</p>
-                          <p style="margin: 4px 0 0; color: #1E3A5F; font-size: 18px; font-weight: 600;">{{subject}}</p>
+                          <p style="margin: 4px 0 0; color: #425cc7; font-size: 18px; font-weight: 600;">{{subject}}</p>
                         </td>
                       </tr>
                       <tr>
@@ -70,11 +70,11 @@ export const defaultTemplates = {
                             <tr>
                               <td width="50%" style="vertical-align: top;">
                                 <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Room</p>
-                                <p style="margin: 4px 0 0; color: #1E3A5F; font-size: 16px; font-weight: 500;">{{roomName}}</p>
+                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{roomName}}</p>
                               </td>
                               <td width="50%" style="vertical-align: top;">
                                 <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Date</p>
-                                <p style="margin: 4px 0 0; color: #1E3A5F; font-size: 16px; font-weight: 500;">{{date}}</p>
+                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{date}}</p>
                               </td>
                             </tr>
                           </table>
@@ -83,7 +83,7 @@ export const defaultTemplates = {
                       <tr>
                         <td style="padding-top: 16px;">
                           <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Time</p>
-                          <p style="margin: 4px 0 0; color: #1E3A5F; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
                         </td>
                       </tr>
                     </table>
@@ -131,10 +131,10 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #1E3A5F 0%, #4169E1 100%); padding: 24px 32px;" bgcolor="#1E3A5F">
+            <td style="background: linear-gradient(135deg, #19226d 0%, #425cc7 100%); padding: 24px 32px;" bgcolor="#19226d">
               <!--[if mso]>
               <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;">
-              <v:fill type="gradient" color="#4169E1" color2="#1E3A5F" angle="135"/>
+              <v:fill type="gradient" color="#425cc7" color2="#19226d" angle="135"/>
               <v:textbox inset="0,0,0,0">
               <![endif]-->
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
@@ -157,11 +157,11 @@ export const defaultTemplates = {
           <!-- Content -->
           <tr>
             <td style="padding: 32px;">
-              <p style="margin: 0 0 24px; color: #1E3A5F; font-size: 16px; line-height: 1.6;">
+              <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
                 Hi {{organizerName}},
               </p>
               
-              <p style="margin: 0 0 24px; color: #1E3A5F; font-size: 16px; line-height: 1.6;">
+              <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
                 Unfortunately, your room booking request could not be confirmed.
               </p>
               
@@ -184,7 +184,7 @@ export const defaultTemplates = {
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
                           <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Requested Meeting</p>
-                          <p style="margin: 4px 0 0; color: #1E3A5F; font-size: 18px; font-weight: 600;">{{subject}}</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 18px; font-weight: 600;">{{subject}}</p>
                         </td>
                       </tr>
                       <tr>
@@ -193,11 +193,11 @@ export const defaultTemplates = {
                             <tr>
                               <td width="50%" style="vertical-align: top;">
                                 <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Room</p>
-                                <p style="margin: 4px 0 0; color: #1E3A5F; font-size: 16px; font-weight: 500;">{{roomName}}</p>
+                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{roomName}}</p>
                               </td>
                               <td width="50%" style="vertical-align: top;">
                                 <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Date</p>
-                                <p style="margin: 4px 0 0; color: #1E3A5F; font-size: 16px; font-weight: 500;">{{date}}</p>
+                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{date}}</p>
                               </td>
                             </tr>
                           </table>
@@ -206,7 +206,7 @@ export const defaultTemplates = {
                       <tr>
                         <td style="padding-top: 16px;">
                           <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Time</p>
-                          <p style="margin: 4px 0 0; color: #1E3A5F; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
                         </td>
                       </tr>
                     </table>
@@ -272,73 +272,27 @@ const timezoneMap: Record<string, string> = {
 }
 
 function formatDateTime(isoString: string, timeZone: string) {
-  // Microsoft Graph returns dateTime WITHOUT timezone info (e.g., "2026-04-25T02:30:00.0000000")
-  // The timezone is provided separately in the timeZone field
-  // We need to interpret the dateTime as being in the specified timezone
+  // Microsoft Graph returns dateTime in UTC format (ending with Z)
+  // We need to convert it to the organizer's timezone for display
 
   // Convert Microsoft timezone ID to IANA if needed
   const ianaTimezone = timezoneMap[timeZone] || timeZone || "America/New_York"
 
-  // Parse the datetime string - if it doesn't have Z or offset, it's a local time in the specified timezone
-  let dateStr = isoString
-
-  // Remove trailing zeros from milliseconds if present (Microsoft format)
-  dateStr = dateStr.replace(/\.0+$/, "")
-
-  // If the string doesn't have timezone info, we need to interpret it in the specified timezone
-  // Create a date by appending the timezone offset would be complex, so we use a different approach:
-  // Format directly using the timezone, treating the input as a local time representation
-
-  const hasTimezone = dateStr.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateStr)
+  console.log(`[EMAIL] formatDateTime called with: isoString=${isoString}, timeZone=${timeZone}, ianaTimezone=${ianaTimezone}`)
 
   try {
-    let date: Date
+    // Parse the datetime - Microsoft Graph sends UTC times with Z suffix
+    // or local times without suffix (depends on event configuration)
+    let dateStr = isoString.replace(/\.0+$/, "") // Remove trailing zeros
 
-    if (hasTimezone) {
-      // If it has timezone info, parse normally
-      date = new Date(dateStr)
-    } else {
-      // If no timezone info, the datetime represents local time in the specified timezone
-      // We need to parse it as-is and format it without conversion
-      // Create date parts from the string
-      const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
-      if (match) {
-        const [, year, month, day, hour, minute] = match
-
-        // Format directly without Date object conversion issues
-        const dateObj = new Date(Date.UTC(
-          parseInt(year),
-          parseInt(month) - 1,
-          parseInt(day),
-          parseInt(hour),
-          parseInt(minute)
-        ))
-
-        // Since we put it in UTC, format in UTC to get the exact values back
-        const dateOptions: Intl.DateTimeFormatOptions = {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          timeZone: "UTC",
-        }
-
-        const timeOptions: Intl.DateTimeFormatOptions = {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-          timeZone: "UTC",
-        }
-
-        return {
-          date: dateObj.toLocaleDateString("en-US", dateOptions),
-          time: dateObj.toLocaleTimeString("en-US", timeOptions),
-        }
-      }
-      // Fallback
-      date = new Date(dateStr)
+    // If no timezone indicator, assume UTC (Microsoft Graph default)
+    if (!dateStr.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(dateStr)) {
+      dateStr = dateStr + "Z"
     }
 
+    const date = new Date(dateStr)
+
+    // Format in the organizer's timezone
     const dateOptions: Intl.DateTimeFormatOptions = {
       weekday: "long",
       year: "numeric",
@@ -354,12 +308,18 @@ function formatDateTime(isoString: string, timeZone: string) {
       timeZone: ianaTimezone,
     }
 
+    const formattedDate = date.toLocaleDateString("en-US", dateOptions)
+    const formattedTime = date.toLocaleTimeString("en-US", timeOptions)
+
+    console.log(`[EMAIL] Formatted result: date=${formattedDate}, time=${formattedTime}`)
+
     return {
-      date: date.toLocaleDateString("en-US", dateOptions),
-      time: date.toLocaleTimeString("en-US", timeOptions),
+      date: formattedDate,
+      time: formattedTime,
     }
-  } catch {
-    // Fall back to date-fns UTC formatting if timezone is invalid
+  } catch (error) {
+    console.error(`[EMAIL] Error formatting datetime:`, error)
+    // Fall back to date-fns formatting
     return {
       date: format(new Date(isoString), "EEEE, MMMM d, yyyy"),
       time: format(new Date(isoString), "h:mm a"),
@@ -371,10 +331,15 @@ function formatDateTime(isoString: string, timeZone: string) {
 function getTimezoneDisplayName(timeZone: string): string {
   const displayNames: Record<string, string> = {
     "Eastern Standard Time": "ET",
+    "Eastern Daylight Time": "ET",
     "Pacific Standard Time": "PT",
+    "Pacific Daylight Time": "PT",
     "Central Standard Time": "CT",
+    "Central Daylight Time": "CT",
     "Mountain Standard Time": "MT",
+    "Mountain Daylight Time": "MT",
     "UTC": "UTC",
+    "Coordinated Universal Time": "UTC",
     "America/New_York": "ET",
     "America/Los_Angeles": "PT",
     "America/Chicago": "CT",

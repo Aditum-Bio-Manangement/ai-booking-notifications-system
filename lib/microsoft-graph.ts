@@ -208,13 +208,19 @@ export async function getRoomEvent(
 // Get a user's timezone from their mailbox settings
 export async function getUserTimezone(userEmail: string): Promise<string> {
   try {
-    const response = await graphRequest<{ timeZone: string }>(
-      `/users/${userEmail}/mailboxSettings/timeZone`
+    // Get the full mailboxSettings object which contains the timeZone
+    const response = await graphRequest<{ timeZone?: string; value?: string }>(
+      `/users/${userEmail}/mailboxSettings`
     )
-    return response.timeZone || "UTC"
+    console.log(`[GRAPH] Mailbox settings for ${userEmail}:`, JSON.stringify(response))
+
+    const timezone = response.timeZone || response.value || "Eastern Standard Time"
+    console.log(`[GRAPH] Using timezone: ${timezone}`)
+    return timezone
   } catch (error) {
     console.error(`[GRAPH] Failed to get timezone for ${userEmail}:`, error)
-    return "UTC"
+    // Default to Eastern time if we can't get user's timezone
+    return "Eastern Standard Time"
   }
 }
 

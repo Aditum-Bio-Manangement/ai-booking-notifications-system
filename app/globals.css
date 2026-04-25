@@ -4,40 +4,49 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Light theme - Aditum Bio branding: Royal Blue, Teal accent, Navy text */
+  /* Light theme - Aditum Bio branding */
+  /* Primary: #425cc7, Secondary: #19226d, Tertiary: #19d3c5, #00aeef */
   --background: oklch(0.985 0 0);
-  --foreground: oklch(0.25 0.05 255);
+  --foreground: oklch(0.22 0.06 265);
+  /* Secondary navy for text */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.25 0.05 255);
+  --card-foreground: oklch(0.22 0.06 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.25 0.05 255);
-  --primary: oklch(0.52 0.18 260);
+  --popover-foreground: oklch(0.22 0.06 265);
+  --primary: oklch(0.48 0.16 262);
+  /* #425cc7 */
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.96 0.01 255);
-  --secondary-foreground: oklch(0.25 0.05 255);
-  --muted: oklch(0.96 0.01 255);
-  --muted-foreground: oklch(0.45 0.02 255);
-  --accent: oklch(0.72 0.14 185);
-  --accent-foreground: oklch(0.2 0.05 255);
+  --secondary: oklch(0.96 0.01 262);
+  --secondary-foreground: oklch(0.22 0.06 265);
+  /* #19226d */
+  --muted: oklch(0.96 0.01 262);
+  --muted-foreground: oklch(0.45 0.04 262);
+  --accent: oklch(0.75 0.14 185);
+  /* #19d3c5 teal */
+  --accent-foreground: oklch(0.22 0.06 265);
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.91 0.01 255);
-  --input: oklch(0.91 0.01 255);
-  --ring: oklch(0.52 0.18 260);
-  --chart-1: oklch(0.52 0.18 260);
-  --chart-2: oklch(0.72 0.14 185);
-  --chart-3: oklch(0.65 0.15 145);
-  --chart-4: oklch(0.55 0.22 25);
-  --chart-5: oklch(0.6 0.15 300);
+  --border: oklch(0.91 0.02 262);
+  --input: oklch(0.91 0.02 262);
+  --ring: oklch(0.48 0.16 262);
+  --chart-1: oklch(0.48 0.16 262);
+  /* Primary blue */
+  --chart-2: oklch(0.75 0.14 185);
+  /* Teal */
+  --chart-3: oklch(0.65 0.16 210);
+  /* #00aeef light blue */
+  --chart-4: oklch(0.22 0.06 265);
+  /* Secondary navy */
+  --chart-5: oklch(0.55 0.22 25);
   --radius: 0.5rem;
   --sidebar: oklch(0.98 0 0);
-  --sidebar-foreground: oklch(0.25 0.05 255);
-  --sidebar-primary: oklch(0.52 0.18 260);
+  --sidebar-foreground: oklch(0.22 0.06 265);
+  --sidebar-primary: oklch(0.48 0.16 262);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.96 0.01 255);
-  --sidebar-accent-foreground: oklch(0.25 0.05 255);
-  --sidebar-border: oklch(0.91 0.01 255);
-  --sidebar-ring: oklch(0.52 0.18 260);
+  --sidebar-accent: oklch(0.96 0.01 262);
+  --sidebar-accent-foreground: oklch(0.22 0.06 265);
+  --sidebar-border: oklch(0.91 0.02 262);
+  --sidebar-ring: oklch(0.48 0.16 262);
   --success: oklch(0.65 0.2 145);
   --success-foreground: oklch(1 0 0);
   --warning: oklch(0.75 0.15 80);
@@ -46,42 +55,48 @@
 
 .dark {
   /* Dark theme - Aditum Bio branding adapted for dark mode */
-  --background: oklch(0.14 0.02 255);
+  /* Primary: #425cc7, Secondary: #19226d, Tertiary: #19d3c5, #00aeef */
+  --background: oklch(0.14 0.03 265);
   --foreground: oklch(0.95 0 0);
-  --card: oklch(0.18 0.02 255);
+  --card: oklch(0.18 0.03 265);
   --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.18 0.02 255);
+  --popover: oklch(0.18 0.03 265);
   --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.62 0.18 260);
+  --primary: oklch(0.58 0.16 262);
+  /* Lighter primary for dark mode */
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.24 0.02 255);
+  --secondary: oklch(0.24 0.03 265);
   --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.24 0.02 255);
+  --muted: oklch(0.24 0.03 265);
   --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.72 0.14 185);
-  --accent-foreground: oklch(0.14 0.02 255);
+  --accent: oklch(0.75 0.14 185);
+  /* #19d3c5 teal */
+  --accent-foreground: oklch(0.14 0.03 265);
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.95 0 0);
-  --border: oklch(0.28 0.02 255);
-  --input: oklch(0.24 0.02 255);
-  --ring: oklch(0.62 0.18 260);
-  --chart-1: oklch(0.62 0.18 260);
-  --chart-2: oklch(0.72 0.14 185);
-  --chart-3: oklch(0.65 0.15 145);
+  --border: oklch(0.28 0.03 265);
+  --input: oklch(0.24 0.03 265);
+  --ring: oklch(0.58 0.16 262);
+  --chart-1: oklch(0.58 0.16 262);
+  /* Primary blue */
+  --chart-2: oklch(0.75 0.14 185);
+  /* Teal */
+  --chart-3: oklch(0.65 0.16 210);
+  /* #00aeef light blue */
   --chart-4: oklch(0.55 0.22 25);
   --chart-5: oklch(0.6 0.15 300);
-  --sidebar: oklch(0.16 0.02 255);
+  --sidebar: oklch(0.16 0.03 265);
   --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.62 0.18 260);
+  --sidebar-primary: oklch(0.58 0.16 262);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.24 0.02 255);
+  --sidebar-accent: oklch(0.24 0.03 265);
   --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.28 0.02 255);
-  --sidebar-ring: oklch(0.62 0.18 260);
+  --sidebar-border: oklch(0.28 0.03 265);
+  --sidebar-ring: oklch(0.58 0.16 262);
   --success: oklch(0.65 0.2 145);
-  --success-foreground: oklch(0.14 0.02 255);
+  --success-foreground: oklch(0.14 0.03 265);
   --warning: oklch(0.75 0.15 80);
-  --warning-foreground: oklch(0.14 0.02 255);
+  --warning-foreground: oklch(0.14 0.03 265);
 }
 
 @theme inline {
@@ -133,6 +148,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -143,6 +159,7 @@
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(100%);
   }
