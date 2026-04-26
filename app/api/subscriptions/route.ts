@@ -32,24 +32,40 @@ async function saveSubscriptionToDb(subscription: {
   expiresAt: string
   notificationUrl: string
   changeType?: string
+  clientState?: string
 }) {
+  console.log("[v0] saveSubscriptionToDb called with:", JSON.stringify(subscription))
+
   try {
     const supabase = createAdminClient()
+    console.log("[v0] Admin client created:", !!supabase)
+
     if (!supabase) {
       console.error("[SUBSCRIPTION] Supabase admin client not available")
       return
     }
 
-    const { error } = await supabase
+    // Calculate duration in hours from expiresAt
+    const expiresAtDate = new Date(subscription.expiresAt)
+    const now = new Date()
+    const durationHours = Math.round((expiresAtDate.getTime() - now.getTime()) / (1000 * 60 * 60))
+
+    console.log("[v0] Attempting to insert subscription with id:", subscription.id, "durationHours:", durationHours)
+
+    const { data, error } = await supabase
       .from("subscriptions")
       .upsert({
-        graph_subscription_id: subscription.id,
-        room_email: subscription.roomEmail,
-        room_name: subscription.roomEmail.split("@")[0], // Extract room name from email
+        id: subscription.id,
+        roomEmail: subscription.roomEmail,
         resource: subscription.resource,
-        change_type: subscription.changeType || "created,updated,deleted",
-        notification_url: subscription.notificationUrl || "",
-      }, { onConflict: "graph_subscription_id" })
+        expiresAt: subscription.expiresAt,
+        notificationUrl: subscription.notificationUrl || "",
+        durationHours: durationHours > 0 ? durationHours : 72,
+        clientState: subscription.clientState || null,
+      }, { onConflict: "id" })
+      .select()
+
+    console.log("[v0] Upsert result - data:", data, "error:", error)
 
     if (error) {
       console.error("[SUBSCRIPTION] Failed to save to database:", error)
@@ -73,7 +89,7 @@ async function deleteSubscriptionFromDb(subscriptionId: string) {
     const { error } = await supabase
       .from("subscriptions")
       .delete()
-      .eq("graph_subscription_id", subscriptionId)
+      .eq("id", subscriptionId)
 
     if (error) {
       console.error("[SUBSCRIPTION] Failed to delete from database:", error)
@@ -142,12 +158,14 @@ export async function POST(request: NextRequest) {
 
     if (!isGraphConfigured()) {
       // Create mock subscription with specified duration
+      const mockClientState = crypto.randomUUID()
       const mockSub = {
         id: crypto.randomUUID(),
         roomEmail,
         resource: `/users/${roomEmail}/events`,
         expiresAt: new Date(Date.now() + durationMinutes * 60 * 1000).toISOString(),
         status: "active" as const,
+        clientState: mockClientState,
       }
 
       mockSubscriptions.push(mockSub)
@@ -159,7 +177,8 @@ export async function POST(request: NextRequest) {
         resource: mockSub.resource,
         expiresAt: mockSub.expiresAt,
         notificationUrl: "demo-mode",
-        changeType: "created,updated,deleted"
+        changeType: "created,updated,deleted",
+        clientState: mockClientState,
       })
 
       return NextResponse.json({
@@ -190,7 +209,8 @@ export async function POST(request: NextRequest) {
         resource: subscription.resource,
         expiresAt: subscription.expirationDateTime,
         notificationUrl: webhookUrl,
-        changeType: subscription.changeType
+        changeType: subscription.changeType,
+        clientState,
       })
 
       return NextResponse.json({
