@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
-// GET - Fetch all settings
+// GET - Fetch all settings from the settings table
 export async function GET() {
     try {
         const supabase = createAdminClient()
@@ -9,19 +9,21 @@ export async function GET() {
             return NextResponse.json({ error: "Database not configured" }, { status: 500 })
         }
 
-        const { data: settings, error } = await supabase
-            .from("global_notification_settings")
-            .select("setting_key, setting_value")
+        // Fetch from settings table (full settings objects)
+        const { data: settingsData, error } = await supabase
+            .from("settings")
+            .select("key, value")
 
         if (error) {
             console.error("Error fetching settings:", error)
             return NextResponse.json({ error: "Failed to fetch settings" }, { status: 500 })
         }
 
-        // Transform to object format
+        // Transform to object format matching the SystemSettings interface
         const settingsObj: Record<string, unknown> = {}
-        for (const setting of settings || []) {
-            settingsObj[setting.setting_key] = setting.setting_value
+        for (const setting of settingsData || []) {
+            // key is 'notifications', 'general', 'smtp', 'sso', 'roomPolicies'
+            settingsObj[setting.key] = setting.value
         }
 
         return NextResponse.json({ settings: settingsObj })
@@ -46,7 +48,25 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Database not configured" }, { status: 500 })
         }
 
-        // Map frontend settings to database format
+        // Save full settings objects to settings table
+        const settingSections = ["notifications", "general", "smtp", "sso", "roomPolicies"]
+        for (const section of settingSections) {
+            if (settings[section]) {
+                const { error } = await supabase
+                    .from("settings")
+                    .upsert({
+                        key: section,
+                        value: settings[section],
+                        updated_at: new Date().toISOString(),
+                    }, { onConflict: "key" })
+
+                if (error) {
+                    console.error(`Error saving ${section} to settings table:`, error)
+                }
+            }
+        }
+
+        // Also save to global_notification_settings for webhook compatibility
         const settingsToSave = [
             {
                 setting_key: "custom_notifications_enabled",

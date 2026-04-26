@@ -37,6 +37,7 @@ import { FieldGroup, Field, FieldLabel, FieldDescription } from "@/components/ui
 import useSWR from "swr"
 import { UserManagement } from "./user-management"
 import { useTimezone } from "@/lib/timezone-context"
+import { MigrateSettingsButton } from "./migrate-settings-button"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -303,17 +304,58 @@ export function SettingsPanel() {
   // Test variables state
   const [testVariables, setTestVariables] = useState(defaultTestVariables)
 
-  // Load settings from localStorage on mount
+  // Load settings from database first, fallback to localStorage
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(SETTINGS_STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        setSettings({ ...defaultSettings, ...parsed })
+    async function loadSettings() {
+      try {
+        // Try to load from database first
+        const response = await fetch("/api/settings")
+        if (response.ok) {
+          const data = await response.json()
+          if (data.settings && Object.keys(data.settings).length > 0) {
+            // Merge database settings with defaults - using type assertion for dynamic keys
+            const mergedSettings = { ...defaultSettings }
+            const settingsData = data.settings as Record<string, unknown>
+
+            if (settingsData.notifications) {
+              mergedSettings.notifications = { ...mergedSettings.notifications, ...(settingsData.notifications as typeof mergedSettings.notifications) }
+            }
+            if (settingsData.general) {
+              mergedSettings.general = { ...mergedSettings.general, ...(settingsData.general as typeof mergedSettings.general) }
+            }
+            if (settingsData.smtp) {
+              mergedSettings.smtp = { ...mergedSettings.smtp, ...(settingsData.smtp as typeof mergedSettings.smtp) }
+            }
+            if (settingsData.sso) {
+              mergedSettings.sso = { ...mergedSettings.sso, ...(settingsData.sso as typeof mergedSettings.sso) }
+            }
+            if (settingsData.roomPolicies) {
+              mergedSettings.roomPolicies = { ...mergedSettings.roomPolicies, ...(settingsData.roomPolicies as typeof mergedSettings.roomPolicies) }
+            }
+
+            setSettings(mergedSettings)
+            // Sync to localStorage for offline access
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(mergedSettings))
+            return
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load settings from database:", e)
       }
-    } catch (e) {
-      console.error("Failed to load settings:", e)
+
+      // Fallback to localStorage
+      try {
+        const saved = localStorage.getItem(SETTINGS_STORAGE_KEY)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          setSettings({ ...defaultSettings, ...parsed })
+        }
+      } catch (e) {
+        console.error("Failed to load settings from localStorage:", e)
+      }
     }
+
+    loadSettings()
   }, [])
 
   // Update settings helper
@@ -1087,11 +1129,14 @@ Set-CalendarProcessing -Identity "room@aditumbio.com" \\
 
         <TabsContent value="general" className="mt-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">General Settings</CardTitle>
-              <CardDescription>
-                Configure general application preferences
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base">General Settings</CardTitle>
+                <CardDescription>
+                  Configure general application preferences
+                </CardDescription>
+              </div>
+              <MigrateSettingsButton />
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
               <TimezoneSettings />

@@ -34,12 +34,8 @@ async function saveSubscriptionToDb(subscription: {
   changeType?: string
   clientState?: string
 }) {
-  console.log("[v0] saveSubscriptionToDb called with:", JSON.stringify(subscription))
-
   try {
     const supabase = createAdminClient()
-    console.log("[v0] Admin client created:", !!supabase)
-
     if (!supabase) {
       console.error("[SUBSCRIPTION] Supabase admin client not available")
       return
@@ -50,9 +46,7 @@ async function saveSubscriptionToDb(subscription: {
     const now = new Date()
     const durationHours = Math.round((expiresAtDate.getTime() - now.getTime()) / (1000 * 60 * 60))
 
-    console.log("[v0] Attempting to insert subscription with id:", subscription.id, "durationHours:", durationHours)
-
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("subscriptions")
       .upsert({
         id: subscription.id,
@@ -63,9 +57,6 @@ async function saveSubscriptionToDb(subscription: {
         durationHours: durationHours > 0 ? durationHours : 72,
         clientState: subscription.clientState || null,
       }, { onConflict: "id" })
-      .select()
-
-    console.log("[v0] Upsert result - data:", data, "error:", error)
 
     if (error) {
       console.error("[SUBSCRIPTION] Failed to save to database:", error)
