@@ -1,23 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { setCustomTemplate } from "@/lib/email-templates"
-
-// Initialize Supabase admin client with service role to bypass RLS
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-function getSupabaseAdmin() {
-    if (!supabaseUrl || !supabaseServiceKey) {
-        return null
-    }
-    // Use service role key with auth disabled to bypass RLS
-    return createClient(supabaseUrl, supabaseServiceKey, {
-        auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-        },
-    })
-}
 
 // GET - Fetch email template by type
 export async function GET(request: NextRequest) {
@@ -32,7 +15,7 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        const supabase = getSupabaseAdmin()
+        const supabase = createAdminClient()
 
         if (!supabase) {
             return NextResponse.json({
@@ -107,7 +90,7 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const supabase = getSupabaseAdmin()
+        const supabase = createAdminClient()
 
         if (!supabase) {
             // Fallback: just update in-memory cache
@@ -207,7 +190,7 @@ export async function DELETE(request: NextRequest) {
             )
         }
 
-        const supabase = getSupabaseAdmin()
+        const supabase = createAdminClient()
 
         // Clear in-memory cache
         setCustomTemplate(type as "accepted" | "declined", null)

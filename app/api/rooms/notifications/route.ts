@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { disableRoomAutoReply } from "@/lib/microsoft-graph"
 
 // Get notification settings for all rooms or a specific room
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
+    if (!supabase) {
+      return NextResponse.json({ error: "Database not configured" }, { status: 500 })
+    }
     const roomId = request.nextUrl.searchParams.get("roomId")
 
     if (roomId) {
@@ -47,13 +50,16 @@ export async function GET(request: NextRequest) {
 // Update notification settings for a room
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
+    if (!supabase) {
+      return NextResponse.json({ error: "Database not configured" }, { status: 500 })
+    }
     const body = await request.json()
-    const { 
-      roomId, 
+    const {
+      roomId,
       roomEmail,
-      customNotificationsEnabled, 
-      suppressExchangeNotifications 
+      customNotificationsEnabled,
+      suppressExchangeNotifications
     } = body
 
     if (!roomId) {
@@ -106,11 +112,14 @@ export async function POST(request: NextRequest) {
 // Bulk update notification settings for multiple rooms
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
+    if (!supabase) {
+      return NextResponse.json({ error: "Database not configured" }, { status: 500 })
+    }
     const body = await request.json()
-    const { 
-      roomIds, 
-      customNotificationsEnabled, 
+    const {
+      roomIds,
+      customNotificationsEnabled,
       suppressExchangeNotifications,
       roomEmails // Array of {id, email} objects
     } = body

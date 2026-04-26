@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getRoomEvent, sendEmail, getUserTimezone } from "@/lib/microsoft-graph"
 import { renderAcceptedEmail, renderDeclinedEmail } from "@/lib/email-templates"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 // Store processed notifications to ensure idempotency (prevents duplicate webhook processing)
 const processedNotifications = new Map<string, number>()
@@ -149,40 +149,44 @@ async function processNotification(notification: GraphNotification) {
   let sendDeclineNotifications = true
 
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
-    // First check room-specific settings
-    const { data: roomSettings } = await supabase
-      .from("room_notification_settings")
-      .select("custom_notifications_enabled")
-      .eq("room_email", roomEmail)
-      .single()
-
-    // If room-specific setting exists, use it
-    if (roomSettings && roomSettings.custom_notifications_enabled !== null) {
-      customNotificationsEnabled = roomSettings.custom_notifications_enabled
-      console.log(`[WEBHOOK] Room-specific setting found: customNotificationsEnabled = ${customNotificationsEnabled}`)
+    if (!supabase) {
+      console.log("[WEBHOOK] Supabase not configured, using default settings")
     } else {
-      // Check global settings
-      const { data: globalSettings } = await supabase
-        .from("global_notification_settings")
-        .select("setting_key, setting_value")
+      // First check room-specific settings
+      const { data: roomSettings } = await supabase
+        .from("room_notification_settings")
+        .select("custom_notifications_enabled")
+        .eq("room_email", roomEmail)
+        .single()
 
-      if (globalSettings && globalSettings.length > 0) {
-        for (const setting of globalSettings) {
-          if (setting.setting_key === "custom_notifications_enabled" && setting.setting_value?.enabled !== undefined) {
-            customNotificationsEnabled = setting.setting_value.enabled
-          }
-          if (setting.setting_key === "send_acceptance_notifications" && setting.setting_value?.enabled !== undefined) {
-            sendAcceptanceNotifications = setting.setting_value.enabled
-          }
-          if (setting.setting_key === "send_decline_notifications" && setting.setting_value?.enabled !== undefined) {
-            sendDeclineNotifications = setting.setting_value.enabled
-          }
-        }
-        console.log(`[WEBHOOK] Global settings: customNotificationsEnabled=${customNotificationsEnabled}, sendAcceptance=${sendAcceptanceNotifications}, sendDecline=${sendDeclineNotifications}`)
+      // If room-specific setting exists, use it
+      if (roomSettings && roomSettings.custom_notifications_enabled !== null) {
+        customNotificationsEnabled = roomSettings.custom_notifications_enabled
+        console.log(`[WEBHOOK] Room-specific setting found: customNotificationsEnabled = ${customNotificationsEnabled}`)
       } else {
-        console.log(`[WEBHOOK] No settings found in database, using defaults (all enabled)`)
+        // Check global settings
+        const { data: globalSettings } = await supabase
+          .from("global_notification_settings")
+          .select("setting_key, setting_value")
+
+        if (globalSettings && globalSettings.length > 0) {
+          for (const setting of globalSettings) {
+            if (setting.setting_key === "custom_notifications_enabled" && setting.setting_value?.enabled !== undefined) {
+              customNotificationsEnabled = setting.setting_value.enabled
+            }
+            if (setting.setting_key === "send_acceptance_notifications" && setting.setting_value?.enabled !== undefined) {
+              sendAcceptanceNotifications = setting.setting_value.enabled
+            }
+            if (setting.setting_key === "send_decline_notifications" && setting.setting_value?.enabled !== undefined) {
+              sendDeclineNotifications = setting.setting_value.enabled
+            }
+          }
+          console.log(`[WEBHOOK] Global settings: customNotificationsEnabled=${customNotificationsEnabled}, sendAcceptance=${sendAcceptanceNotifications}, sendDecline=${sendDeclineNotifications}`)
+        } else {
+          console.log(`[WEBHOOK] No settings found in database, using defaults (all enabled)`)
+        }
       }
     }
   } catch (error) {

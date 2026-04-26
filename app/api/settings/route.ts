@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 // GET - Fetch all settings
 export async function GET() {
     try {
-        const supabase = await createClient()
+        const supabase = createAdminClient()
+        if (!supabase) {
+            return NextResponse.json({ error: "Database not configured" }, { status: 500 })
+        }
 
         const { data: settings, error } = await supabase
             .from("global_notification_settings")
@@ -38,7 +41,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Settings are required" }, { status: 400 })
         }
 
-        const supabase = await createClient()
+        const supabase = createAdminClient()
+        if (!supabase) {
+            return NextResponse.json({ error: "Database not configured" }, { status: 500 })
+        }
 
         // Map frontend settings to database format
         const settingsToSave = [

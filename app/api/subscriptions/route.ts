@@ -5,25 +5,7 @@ import {
   listSubscriptions,
   renewSubscription,
 } from "@/lib/microsoft-graph"
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-
-// Create admin client that bypasses RLS
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error("[SUBSCRIPTION] Missing Supabase credentials")
-    return null
-  }
-
-  return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
+import { createAdminClient } from "@/lib/supabase/admin"
 
 // In-memory storage for mock subscriptions (in production, use a database)
 let mockSubscriptions: Array<{
@@ -52,7 +34,7 @@ async function saveSubscriptionToDb(subscription: {
   changeType?: string
 }) {
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = createAdminClient()
     if (!supabase) {
       console.error("[SUBSCRIPTION] Supabase admin client not available")
       return
@@ -66,6 +48,7 @@ async function saveSubscriptionToDb(subscription: {
         room_name: subscription.roomEmail.split("@")[0], // Extract room name from email
         resource: subscription.resource,
         change_type: subscription.changeType || "created,updated,deleted",
+        notification_url: subscription.notificationUrl || "",
       }, { onConflict: "graph_subscription_id" })
 
     if (error) {
@@ -81,7 +64,7 @@ async function saveSubscriptionToDb(subscription: {
 // Helper to delete subscription from Supabase
 async function deleteSubscriptionFromDb(subscriptionId: string) {
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = createAdminClient()
     if (!supabase) {
       console.error("[SUBSCRIPTION] Supabase admin client not available")
       return
@@ -168,6 +151,16 @@ export async function POST(request: NextRequest) {
       }
 
       mockSubscriptions.push(mockSub)
+
+      // Save to database even in demo mode
+      await saveSubscriptionToDb({
+        id: mockSub.id,
+        roomEmail,
+        resource: mockSub.resource,
+        expiresAt: mockSub.expiresAt,
+        notificationUrl: "demo-mode",
+        changeType: "created,updated,deleted"
+      })
 
       return NextResponse.json({
         subscription: mockSub,
@@ -294,6 +287,9 @@ export async function DELETE(request: NextRequest) {
       }
 
       mockSubscriptions.splice(subIndex, 1)
+
+      // Delete from database too
+      await deleteSubscriptionFromDb(subscriptionId)
 
       return NextResponse.json({ success: true, message: "Demo subscription deleted" })
     }

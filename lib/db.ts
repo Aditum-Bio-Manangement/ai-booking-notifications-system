@@ -1,4 +1,13 @@
-import { createClient } from '@/lib/supabase/client'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+// Helper to get admin client with null check
+function getAdminClient() {
+  const client = createAdminClient()
+  if (!client) {
+    throw new Error('Supabase admin client not configured')
+  }
+  return client
+}
 
 // Database types based on our schema
 export interface Profile {
@@ -80,7 +89,7 @@ export const db = {
   // Profiles
   profiles: {
     async getAll() {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -90,7 +99,7 @@ export const db = {
     },
 
     async getById(id: string) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -101,7 +110,7 @@ export const db = {
     },
 
     async update(id: string, updates: Partial<Profile>) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('profiles')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -113,7 +122,7 @@ export const db = {
     },
 
     async create(profile: Omit<Profile, 'created_at' | 'updated_at'>) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('profiles')
         .insert(profile)
@@ -124,7 +133,7 @@ export const db = {
     },
 
     async delete(id: string) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { error } = await supabase
         .from('profiles')
         .delete()
@@ -136,12 +145,12 @@ export const db = {
   // Settings
   settings: {
     async get(key: string, userId?: string) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       let query = supabase
         .from('settings')
         .select('*')
         .eq('key', key)
-      
+
       if (userId) {
         query = query.eq('user_id', userId)
       } else {
@@ -154,7 +163,7 @@ export const db = {
     },
 
     async set(key: string, value: Record<string, unknown>, userId?: string) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('settings')
         .upsert({
@@ -172,7 +181,7 @@ export const db = {
     },
 
     async getAll() {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('settings')
         .select('*')
@@ -185,7 +194,7 @@ export const db = {
   // Subscriptions
   subscriptions: {
     async getAll() {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('subscriptions')
         .select('*')
@@ -195,7 +204,7 @@ export const db = {
     },
 
     async create(subscription: Omit<Subscription, 'id' | 'created_at' | 'updated_at'>) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('subscriptions')
         .insert(subscription)
@@ -206,7 +215,7 @@ export const db = {
     },
 
     async update(id: string, updates: Partial<Subscription>) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('subscriptions')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -218,7 +227,7 @@ export const db = {
     },
 
     async delete(id: string) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { error } = await supabase
         .from('subscriptions')
         .delete()
@@ -230,7 +239,7 @@ export const db = {
   // Notifications
   notifications: {
     async getAll(limit = 100) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
@@ -241,7 +250,7 @@ export const db = {
     },
 
     async create(notification: Omit<Notification, 'id' | 'created_at'>) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('notifications')
         .insert(notification)
@@ -252,7 +261,7 @@ export const db = {
     },
 
     async markDelivered(id: string) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { error } = await supabase
         .from('notifications')
         .update({ delivered: true, sent_at: new Date().toISOString() })
@@ -261,7 +270,7 @@ export const db = {
     },
 
     async markFailed(id: string, errorMessage: string) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { error } = await supabase
         .from('notifications')
         .update({ delivered: false, error_message: errorMessage })
@@ -273,7 +282,7 @@ export const db = {
   // Room Policies
   roomPolicies: {
     async getAll() {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('room_policies')
         .select('*')
@@ -283,7 +292,7 @@ export const db = {
     },
 
     async getByRoomEmail(roomEmail: string) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('room_policies')
         .select('*')
@@ -294,7 +303,7 @@ export const db = {
     },
 
     async upsert(policy: Omit<RoomPolicy, 'id' | 'created_at' | 'updated_at'>) {
-      const supabase = createClient()
+      const supabase = getAdminClient()
       const { data, error } = await supabase
         .from('room_policies')
         .upsert({
