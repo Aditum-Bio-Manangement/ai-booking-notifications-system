@@ -327,10 +327,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const supabase = createClient()
+      // Use environment variable if set, otherwise use current origin
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+      console.log("[v0] OAuth redirectTo:", `${siteUrl}/auth/callback`)
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "azure",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${siteUrl}/auth/callback`,
           scopes: "openid profile email",
         },
       })

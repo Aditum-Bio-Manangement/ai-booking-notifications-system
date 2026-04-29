@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { ArrowLeft, Bell, CheckCircle2, XCircle, Clock, Trash2, CheckCheck, BellOff, Filter } from "lucide-react"
+import { ArrowLeft, Bell, CheckCircle2, XCircle, Clock, Trash2, CheckCheck, BellOff, Filter, RefreshCw, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,121 +17,108 @@ import {
 import { FieldGroup, Field, FieldLabel, FieldDescription } from "@/components/ui/field"
 import { formatInTimeZone } from "date-fns-tz"
 
-interface AppNotification {
+interface Notification {
   id: string
-  type: "accepted" | "declined" | "subscription" | "system"
-  title: string
-  message: string
-  timestamp: string
-  read: boolean
-  roomName?: string
+  type?: string
+  status: string
+  recipient_email: string | null
+  recipient_name: string | null
+  subject: string
+  body: string | null
+  created_at?: string | null // May not exist in all schemas
+  sent_at?: string | null
 }
 
-const NOTIFICATIONS_STORAGE_KEY = "app-notifications"
 const NOTIFICATIONS_ENABLED_KEY = "app-notifications-enabled"
+const READ_NOTIFICATIONS_KEY = "read-notification-ids"
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>([])
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [filter, setFilter] = useState<string>("all")
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [readIds, setReadIds] = useState<Set<string>>(new Set())
 
-  // Load notifications from localStorage
+  // Load read notification IDs from localStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY)
+      const saved = localStorage.getItem(READ_NOTIFICATIONS_KEY)
       if (saved) {
-        setNotifications(JSON.parse(saved))
-      } else {
-        // Set default notifications for demo
-        const defaultNotifications: AppNotification[] = [
-          {
-            id: "1",
-            type: "accepted",
-            title: "Booking Confirmed",
-            message: "Q1 Planning Meeting confirmed for Cambridge Conference Room A",
-            timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-            read: false,
-            roomName: "Cambridge Conference Room A",
-          },
-          {
-            id: "2",
-            type: "declined",
-            title: "Booking Declined",
-            message: "Product Review declined for Oakland Boardroom - room already booked",
-            timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-            read: false,
-            roomName: "Oakland Boardroom",
-          },
-          {
-            id: "3",
-            type: "subscription",
-            title: "Subscription Expiring",
-            message: "Graph subscription for room@aditumbio.com expires in 2 hours",
-            timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-            read: false,
-          },
-          {
-            id: "4",
-            type: "accepted",
-            title: "Booking Confirmed",
-            message: "Weekly Standup confirmed for Cambridge Huddle Space 1",
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-            read: true,
-            roomName: "Cambridge Huddle Space 1",
-          },
-          {
-            id: "5",
-            type: "system",
-            title: "System Update",
-            message: "Webhook subscriptions renewed successfully for all rooms",
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
-            read: true,
-          },
-          {
-            id: "6",
-            type: "declined",
-            title: "Booking Declined",
-            message: "Team Lunch declined for Oakland Conference Room B - conflicts with existing booking",
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-            read: true,
-            roomName: "Oakland Conference Room B",
-          },
-        ]
-        setNotifications(defaultNotifications)
-        localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(defaultNotifications))
+        setReadIds(new Set(JSON.parse(saved)))
       }
-
       const enabledSaved = localStorage.getItem(NOTIFICATIONS_ENABLED_KEY)
       if (enabledSaved !== null) {
         setNotificationsEnabled(JSON.parse(enabledSaved))
       }
     } catch (e) {
-      console.error("Failed to load notifications:", e)
+      console.error("Failed to load read notifications:", e)
     }
   }, [])
 
-  const saveNotifications = (updated: AppNotification[]) => {
-    setNotifications(updated)
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated))
+  // Fetch notifications from database
+  const fetchNotifications = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/notifications?limit=100")
+      if (!response.ok) {
+        throw new Error("Failed to fetch notifications")
+      }
+      const data = await response.json()
+      setNotifications(data.notifications || [])
+    } catch (e) {
+      console.error("Failed to load notifications:", e)
+      setError("Failed to load notifications from database")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchNotifications()
+  }, [fetchNotifications])
+
+  const saveReadIds = (ids: Set<string>) => {
+    setReadIds(ids)
+    localStorage.setItem(READ_NOTIFICATIONS_KEY, JSON.stringify(Array.from(ids)))
   }
 
   const markAllAsRead = () => {
-    const updated = notifications.map((n) => ({ ...n, read: true }))
-    saveNotifications(updated)
+    const allIds = new Set([...readIds, ...notifications.map(n => n.id)])
+    saveReadIds(allIds)
   }
 
   const markAsRead = (id: string) => {
-    const updated = notifications.map((n) => (n.id === id ? { ...n, read: true } : n))
-    saveNotifications(updated)
+    const newReadIds = new Set([...readIds, id])
+    saveReadIds(newReadIds)
   }
 
-  const deleteNotification = (id: string) => {
-    const updated = notifications.filter((n) => n.id !== id)
-    saveNotifications(updated)
+  const deleteNotification = async (id: string) => {
+    try {
+      const response = await fetch(`/api/notifications?id=${id}`, {
+        method: "DELETE",
+      })
+      if (response.ok) {
+        setNotifications(prev => prev.filter(n => n.id !== id))
+      }
+    } catch (e) {
+      console.error("Failed to delete notification:", e)
+    }
   }
 
-  const clearAll = () => {
-    saveNotifications([])
+  const clearAll = async () => {
+    try {
+      const response = await fetch("/api/notifications?clearAll=true", {
+        method: "DELETE",
+      })
+      if (response.ok) {
+        setNotifications([])
+        saveReadIds(new Set())
+      }
+    } catch (e) {
+      console.error("Failed to clear notifications:", e)
+    }
   }
 
   const toggleNotifications = (enabled: boolean) => {
@@ -139,7 +126,28 @@ export default function NotificationsPage() {
     localStorage.setItem(NOTIFICATIONS_ENABLED_KEY, JSON.stringify(enabled))
   }
 
-  const getNotificationIcon = (type: AppNotification["type"]) => {
+  const getNotificationType = (notification: Notification): "accepted" | "declined" | "subscription" | "system" => {
+    // Determine type from status or subject
+    if (notification.type) {
+      if (notification.type === "accepted" || notification.type === "declined" || notification.type === "subscription" || notification.type === "system") {
+        return notification.type
+      }
+    }
+
+    const subject = notification.subject.toLowerCase()
+    if (subject.includes("confirmed") || subject.includes("accepted") || notification.status === "sent") {
+      return "accepted"
+    }
+    if (subject.includes("declined") || subject.includes("rejected")) {
+      return "declined"
+    }
+    if (subject.includes("subscription") || subject.includes("expir")) {
+      return "subscription"
+    }
+    return "system"
+  }
+
+  const getNotificationIcon = (type: "accepted" | "declined" | "subscription" | "system") => {
     switch (type) {
       case "accepted":
         return <CheckCircle2 className="h-5 w-5 text-[oklch(0.72_0.19_145)]" />
@@ -152,7 +160,7 @@ export default function NotificationsPage() {
     }
   }
 
-  const getNotificationBadge = (type: AppNotification["type"]) => {
+  const getNotificationBadge = (type: "accepted" | "declined" | "subscription" | "system") => {
     switch (type) {
       case "accepted":
         return <Badge variant="outline" className="border-[oklch(0.72_0.19_145)] text-[oklch(0.72_0.19_145)]">Accepted</Badge>
@@ -165,7 +173,21 @@ export default function NotificationsPage() {
     }
   }
 
-  const formatTimestamp = (timestamp: string) => {
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "sent":
+        return <Badge variant="outline" className="border-[oklch(0.72_0.19_145)] text-[oklch(0.72_0.19_145)]">Sent</Badge>
+      case "pending":
+        return <Badge variant="outline" className="border-warning text-warning">Pending</Badge>
+      case "failed":
+        return <Badge variant="destructive">Failed</Badge>
+      default:
+        return <Badge variant="secondary">{status}</Badge>
+    }
+  }
+
+  const formatTimestamp = (timestamp: string | null | undefined) => {
+    if (!timestamp) return "Unknown"
     try {
       return formatInTimeZone(new Date(timestamp), "UTC", "MMM d, yyyy h:mm a")
     } catch {
@@ -175,11 +197,13 @@ export default function NotificationsPage() {
 
   const filteredNotifications = notifications.filter((n) => {
     if (filter === "all") return true
-    if (filter === "unread") return !n.read
-    return n.type === filter
+    if (filter === "unread") return !readIds.has(n.id)
+
+    const type = getNotificationType(n)
+    return type === filter
   })
 
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length
 
   return (
     <div className="min-h-screen bg-background">
@@ -243,6 +267,14 @@ export default function NotificationsPage() {
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchNotifications}
+                    disabled={isLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                  </Button>
                   <Select value={filter} onValueChange={setFilter}>
                     <SelectTrigger className="w-36">
                       <Filter className="mr-2 h-4 w-4" />
@@ -289,6 +321,19 @@ export default function NotificationsPage() {
                     Enable notifications above to receive booking alerts
                   </p>
                 </div>
+              ) : isLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="mt-4 text-sm text-muted-foreground">Loading notifications...</p>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <AlertCircle className="h-12 w-12 text-destructive/50" />
+                  <p className="mt-4 text-lg font-medium text-muted-foreground">{error}</p>
+                  <Button variant="outline" className="mt-4" onClick={fetchNotifications}>
+                    Try Again
+                  </Button>
+                </div>
               ) : filteredNotifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Bell className="h-12 w-12 text-muted-foreground/30" />
@@ -299,54 +344,66 @@ export default function NotificationsPage() {
                 </div>
               ) : (
                 <div className="flex flex-col divide-y divide-border">
-                  {filteredNotifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`flex items-start gap-4 py-4 ${
-                        !notification.read ? "bg-primary/5 -mx-6 px-6" : ""
-                      }`}
-                    >
-                      <div className="mt-0.5 shrink-0">
-                        {getNotificationIcon(notification.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-foreground">{notification.title}</p>
-                          {!notification.read && (
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+                  {filteredNotifications.map((notification) => {
+                    const type = getNotificationType(notification)
+                    const isRead = readIds.has(notification.id)
+
+                    return (
+                      <div
+                        key={notification.id}
+                        className={`flex items-start gap-4 py-4 ${!isRead ? "bg-primary/5 -mx-6 px-6" : ""
+                          }`}
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          {getNotificationIcon(type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-foreground">{notification.subject}</p>
+                            {!isRead && (
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+                            )}
+                          </div>
+                          {notification.body && (
+                            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                              {notification.body}
+                            </p>
                           )}
+                          {notification.recipient_email && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              To: {notification.recipient_name || notification.recipient_email}
+                            </p>
+                          )}
+                          <div className="mt-2 flex items-center gap-2">
+                            {getNotificationBadge(type)}
+                            {getStatusBadge(notification.status)}
+                            <span className="text-xs text-muted-foreground">
+                              {formatTimestamp(notification.created_at)}
+                            </span>
+                          </div>
                         </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {notification.message}
-                        </p>
-                        <div className="mt-2 flex items-center gap-2">
-                          {getNotificationBadge(notification.type)}
-                          <span className="text-xs text-muted-foreground">
-                            {formatTimestamp(notification.timestamp)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        {!notification.read && (
+                        <div className="flex shrink-0 items-center gap-1">
+                          {!isRead && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => markAsRead(notification.id)}
+                            >
+                              <CheckCheck className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => markAsRead(notification.id)}
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => deleteNotification(notification.id)}
                           >
-                            <CheckCheck className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => deleteNotification(notification.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>

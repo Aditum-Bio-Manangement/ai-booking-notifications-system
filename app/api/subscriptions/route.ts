@@ -6,6 +6,7 @@ import {
   renewSubscription,
 } from "@/lib/microsoft-graph"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { db } from "@/lib/db"
 
 // In-memory storage for mock subscriptions (in production, use a database)
 let mockSubscriptions: Array<{
@@ -204,6 +205,14 @@ export async function POST(request: NextRequest) {
         clientState,
       })
 
+      // Log to audit log
+      await db.auditLog.create({
+        action: "subscription.created",
+        resource_type: "subscription",
+        resource_id: subscription.id,
+        details: { roomEmail, expiresAt: subscription.expirationDateTime },
+      })
+
       return NextResponse.json({
         subscription: {
           id: subscription.id,
@@ -309,6 +318,13 @@ export async function DELETE(request: NextRequest) {
 
     // Delete from Supabase database
     await deleteSubscriptionFromDb(subscriptionId)
+
+    // Log to audit log
+    await db.auditLog.create({
+      action: "subscription.deleted",
+      resource_type: "subscription",
+      resource_id: subscriptionId,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -12,6 +12,7 @@ import {
   FileText,
   HelpCircle,
   Settings,
+  ClipboardList,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -28,6 +29,7 @@ const navItems = [
   { id: "bookings", label: "Bookings", icon: CalendarClock },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "monitoring", label: "Monitoring", icon: Activity },
+  { id: "audit-log", label: "Audit Log", icon: ClipboardList },
   { id: "ai-insights", label: "AI Insights", icon: Sparkles },
 ]
 
@@ -48,14 +50,14 @@ export function DashboardSidebar({ activeTab, onTabChange, isOpen = false, onClo
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
           onClick={onClose}
         />
       )}
-      
+
       {/* Sidebar */}
-      <aside 
+      <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-sidebar transition-transform duration-300 ease-in-out md:static md:z-auto md:w-56 md:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full"
@@ -68,7 +70,7 @@ export function DashboardSidebar({ activeTab, onTabChange, isOpen = false, onClo
             <X className="h-5 w-5" />
           </Button>
         </div>
-        
+
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
           <div className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Main

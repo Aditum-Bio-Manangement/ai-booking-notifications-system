@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { setCustomTemplate } from "@/lib/email-templates"
+import { db } from "@/lib/db"
 
 // GET - Fetch email template by type
 export async function GET(request: NextRequest) {
@@ -156,6 +157,14 @@ export async function POST(request: NextRequest) {
             updatedAt: data.updated_at,
         }
         setCustomTemplate(type as "accepted" | "declined", templateData)
+
+        // Log to audit log
+        await db.auditLog.create({
+            action: "email.template.updated",
+            resource_type: "email_template",
+            resource_id: data.id,
+            details: { templateType: type, version: data.version },
+        })
 
         return NextResponse.json({
             success: true,

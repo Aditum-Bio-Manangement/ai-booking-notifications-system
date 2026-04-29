@@ -15,6 +15,7 @@ import { RecentActivity } from "@/components/dashboard/recent-activity"
 import { EmailTemplateEditor } from "@/components/dashboard/email-template-editor"
 import { SendHistoryTable } from "@/components/dashboard/send-history-table"
 import { SettingsPanel } from "@/components/dashboard/settings-panel"
+import { AuditLogPanel } from "@/components/dashboard/audit-log-panel"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -367,6 +368,8 @@ export default function DashboardPage() {
             />
           </div>
         )
+      case "audit-log":
+        return <AuditLogPanel />
       case "ai-insights":
         return (
           <div className="flex flex-col gap-6">

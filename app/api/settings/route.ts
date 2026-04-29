@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { db } from "@/lib/db"
 
 // GET - Fetch all settings from the settings table
 export async function GET() {
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
 
         // Save full settings objects to settings table
         const settingSections = ["notifications", "general", "smtp", "sso", "roomPolicies"]
+        const updatedSections: string[] = []
         for (const section of settingSections) {
             if (settings[section]) {
                 const { error } = await supabase
@@ -62,8 +64,19 @@ export async function POST(request: NextRequest) {
 
                 if (error) {
                     console.error(`Error saving ${section} to settings table:`, error)
+                } else {
+                    updatedSections.push(section)
                 }
             }
+        }
+
+        // Log to audit log
+        if (updatedSections.length > 0) {
+            await db.auditLog.create({
+                action: "settings.updated",
+                resource_type: "settings",
+                details: { sections: updatedSections },
+            })
         }
 
         // Also save to global_notification_settings for webhook compatibility

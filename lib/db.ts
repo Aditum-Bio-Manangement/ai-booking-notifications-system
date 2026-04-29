@@ -318,4 +318,46 @@ export const db = {
       return data as RoomPolicy
     },
   },
+
+  // Audit Log
+  auditLog: {
+    async create(entry: {
+      user_id?: string | null
+      user_email?: string | null
+      action: string
+      resource_type?: string | null
+      resource_id?: string | null
+      details?: Record<string, unknown> | null
+    }) {
+      try {
+        const supabase = getAdminClient()
+        const { error } = await supabase
+          .from('audit_log')
+          .insert({
+            user_id: entry.user_id || null,
+            user_email: entry.user_email || null,
+            action: entry.action,
+            resource_type: entry.resource_type || null,
+            resource_id: entry.resource_id || null,
+            details: entry.details || null,
+          })
+        if (error) {
+          console.error('Failed to create audit log entry:', error)
+        }
+      } catch (e) {
+        console.error('Error creating audit log entry:', e)
+      }
+    },
+
+    async getAll(limit = 50, offset = 0) {
+      const supabase = getAdminClient()
+      const { data, error, count } = await supabase
+        .from('audit_log')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1)
+      if (error) throw error
+      return { entries: data, total: count }
+    },
+  },
 }
