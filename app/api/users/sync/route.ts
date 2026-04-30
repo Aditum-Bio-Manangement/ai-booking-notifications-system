@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getUsers, getUserPhoto } from "@/lib/microsoft-graph"
 import { createClient } from "@/lib/supabase/server"
+import { db } from "@/lib/db"
 
 export interface SyncedUser {
   id: string
@@ -18,7 +19,7 @@ export async function GET() {
   try {
     // Fetch users from Microsoft Graph
     const graphUsers = await getUsers(100)
-    
+
     const users: SyncedUser[] = graphUsers
       .filter(u => u.mail) // Only users with email
       .map(u => ({
@@ -43,7 +44,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const { userIds } = await request.json()
-    
+
     if (!userIds || !Array.isArray(userIds)) {
       return NextResponse.json({ error: "userIds array is required" }, { status: 400 })
     }
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     // Fetch users from Microsoft Graph
     const graphUsers = await getUsers(100)
     const selectedUsers = graphUsers.filter(u => userIds.includes(u.id))
-    
+
     // Fetch photos for selected users
     const usersWithPhotos = await Promise.all(
       selectedUsers.map(async (u) => {
@@ -72,10 +73,10 @@ export async function POST(request: Request) {
     // If Supabase is configured, save to database
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    
+
     if (supabaseUrl && supabaseKey) {
       const supabase = await createClient()
-      
+
       for (const user of usersWithPhotos) {
         // Check if user exists by email
         const { data: existingUser } = await supabase
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
           .select("id")
           .eq("email", user.email)
           .single()
-        
+
         if (existingUser) {
           // Update existing user
           await supabase
@@ -118,10 +119,20 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    // Log to audit log
+    await db.auditLog.create({
+      action: "users.synced",
+      resource_type: "users",
+      details: {
+        syncedCount: usersWithPhotos.length,
+        userEmails: usersWithPhotos.map(u => u.email),
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
       syncedCount: usersWithPhotos.length,
-      users: usersWithPhotos 
+      users: usersWithPhotos
     })
   } catch (error) {
     console.error("Users sync error:", error)

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { ArrowLeft, Bell, CheckCircle2, XCircle, Clock, Trash2, CheckCheck, BellOff, Filter, RefreshCw, AlertCircle, Loader2 } from "lucide-react"
+import { ArrowLeft, Bell, CheckCircle2, XCircle, Trash2, CheckCheck, Filter, RefreshCw, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,16 +17,29 @@ import {
 import { FieldGroup, Field, FieldLabel, FieldDescription } from "@/components/ui/field"
 import { formatInTimeZone } from "date-fns-tz"
 
+interface BookingEvent {
+  id: string
+  subject: string
+  organizer: string
+  organizerEmail: string
+  roomId: string
+  roomName: string
+  site: string
+  outcome: string
+  notificationStatus?: string
+  notificationSent?: boolean
+  createdAt: string
+}
+
 interface Notification {
   id: string
-  type?: string
-  status: string
-  recipient_email: string | null
-  recipient_name: string | null
-  subject: string
-  body: string | null
-  created_at?: string | null // May not exist in all schemas
-  sent_at?: string | null
+  type: "accepted" | "declined"
+  title: string
+  message: string
+  roomName: string
+  organizer: string
+  timestamp: string
+  read: boolean
 }
 
 const NOTIFICATIONS_ENABLED_KEY = "app-notifications-enabled"
@@ -56,27 +69,61 @@ export default function NotificationsPage() {
     }
   }, [])
 
-  // Fetch notifications from database
-  const fetchNotifications = useCallback(async () => {
+  // Fetch notifications from events API (same source as header dropdown)
+  const fetchNotifications = useCallback(async (currentReadIds: Set<string>) => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch("/api/notifications?limit=100")
-      if (!response.ok) {
-        throw new Error("Failed to fetch notifications")
-      }
+      const response = await fetch("/api/events")
       const data = await response.json()
-      setNotifications(data.notifications || [])
+
+      if (!response.ok) {
+        if (data.configured === false) {
+          setError("Microsoft Graph not configured")
+          setNotifications([])
+          return
+        }
+        throw new Error("Failed to fetch events")
+      }
+
+      // Convert booking events to notifications (exactly like header does)
+      // API returns { bookings: [...] } not { events: [...] }
+      const bookingNotifications: Notification[] = (data.bookings || [])
+        .map((booking: BookingEvent) => ({
+          id: booking.id,
+          type: booking.outcome === "accepted" ? "accepted" as const : "declined" as const,
+          title: booking.subject || "Meeting",
+          message: booking.outcome === "accepted"
+            ? `${booking.organizer} - ${booking.roomName} confirmed`
+            : `${booking.organizer} - ${booking.roomName} declined`,
+          roomName: booking.roomName,
+          organizer: booking.organizer,
+          timestamp: booking.createdAt,
+          read: currentReadIds.has(booking.id),
+        }))
+
+      setNotifications(bookingNotifications)
     } catch (e) {
       console.error("Failed to load notifications:", e)
-      setError("Failed to load notifications from database")
+      setError("Failed to load notifications")
     } finally {
       setIsLoading(false)
     }
   }, [])
 
+  // Fetch once on mount, readIds will be applied from localStorage in the fetch
   useEffect(() => {
-    fetchNotifications()
+    // Get current readIds from localStorage for initial fetch
+    let currentReadIds = new Set<string>()
+    try {
+      const saved = localStorage.getItem(READ_NOTIFICATIONS_KEY)
+      if (saved) {
+        currentReadIds = new Set(JSON.parse(saved))
+      }
+    } catch (e) {
+      console.error("Failed to load read IDs:", e)
+    }
+    fetchNotifications(currentReadIds)
   }, [fetchNotifications])
 
   const saveReadIds = (ids: Set<string>) => {
@@ -87,38 +134,21 @@ export default function NotificationsPage() {
   const markAllAsRead = () => {
     const allIds = new Set([...readIds, ...notifications.map(n => n.id)])
     saveReadIds(allIds)
+    setNotifications(notifications.map(n => ({ ...n, read: true })))
   }
 
   const markAsRead = (id: string) => {
     const newReadIds = new Set([...readIds, id])
     saveReadIds(newReadIds)
+    setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n))
   }
 
-  const deleteNotification = async (id: string) => {
-    try {
-      const response = await fetch(`/api/notifications?id=${id}`, {
-        method: "DELETE",
-      })
-      if (response.ok) {
-        setNotifications(prev => prev.filter(n => n.id !== id))
-      }
-    } catch (e) {
-      console.error("Failed to delete notification:", e)
-    }
+  const clearNotification = (id: string) => {
+    setNotifications(notifications.filter(n => n.id !== id))
   }
 
-  const clearAll = async () => {
-    try {
-      const response = await fetch("/api/notifications?clearAll=true", {
-        method: "DELETE",
-      })
-      if (response.ok) {
-        setNotifications([])
-        saveReadIds(new Set())
-      }
-    } catch (e) {
-      console.error("Failed to clear notifications:", e)
-    }
+  const clearAll = () => {
+    setNotifications([])
   }
 
   const toggleNotifications = (enabled: boolean) => {
@@ -126,63 +156,35 @@ export default function NotificationsPage() {
     localStorage.setItem(NOTIFICATIONS_ENABLED_KEY, JSON.stringify(enabled))
   }
 
-  const getNotificationType = (notification: Notification): "accepted" | "declined" | "subscription" | "system" => {
-    // Determine type from status or subject
-    if (notification.type) {
-      if (notification.type === "accepted" || notification.type === "declined" || notification.type === "subscription" || notification.type === "system") {
-        return notification.type
-      }
-    }
+  const filteredNotifications = notifications.filter(n => {
+    if (filter === "all") return true
+    if (filter === "unread") return !n.read
+    if (filter === "accepted") return n.type === "accepted"
+    if (filter === "declined") return n.type === "declined"
+    return true
+  })
 
-    const subject = notification.subject.toLowerCase()
-    if (subject.includes("confirmed") || subject.includes("accepted") || notification.status === "sent") {
-      return "accepted"
-    }
-    if (subject.includes("declined") || subject.includes("rejected")) {
-      return "declined"
-    }
-    if (subject.includes("subscription") || subject.includes("expir")) {
-      return "subscription"
-    }
-    return "system"
-  }
+  const unreadCount = notifications.filter(n => !n.read).length
 
-  const getNotificationIcon = (type: "accepted" | "declined" | "subscription" | "system") => {
+  const getIcon = (type: string) => {
     switch (type) {
       case "accepted":
-        return <CheckCircle2 className="h-5 w-5 text-[oklch(0.72_0.19_145)]" />
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />
       case "declined":
-        return <XCircle className="h-5 w-5 text-destructive" />
-      case "subscription":
-        return <Clock className="h-5 w-5 text-warning" />
+        return <XCircle className="h-5 w-5 text-red-500" />
       default:
         return <Bell className="h-5 w-5 text-muted-foreground" />
     }
   }
 
-  const getNotificationBadge = (type: "accepted" | "declined" | "subscription" | "system") => {
+  const getBadgeVariant = (type: string) => {
     switch (type) {
       case "accepted":
-        return <Badge variant="outline" className="border-[oklch(0.72_0.19_145)] text-[oklch(0.72_0.19_145)]">Accepted</Badge>
+        return "default"
       case "declined":
-        return <Badge variant="destructive">Declined</Badge>
-      case "subscription":
-        return <Badge variant="outline" className="border-warning text-warning">Subscription</Badge>
+        return "destructive"
       default:
-        return <Badge variant="secondary">System</Badge>
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "sent":
-        return <Badge variant="outline" className="border-[oklch(0.72_0.19_145)] text-[oklch(0.72_0.19_145)]">Sent</Badge>
-      case "pending":
-        return <Badge variant="outline" className="border-warning text-warning">Pending</Badge>
-      case "failed":
-        return <Badge variant="destructive">Failed</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
+        return "secondary"
     }
   }
 
@@ -195,89 +197,67 @@ export default function NotificationsPage() {
     }
   }
 
-  const filteredNotifications = notifications.filter((n) => {
-    if (filter === "all") return true
-    if (filter === "unread") return !readIds.has(n.id)
-
-    const type = getNotificationType(n)
-    return type === filter
-  })
-
-  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length
-
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-4xl items-center gap-4 px-6 py-4">
-          <Link href="/">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold text-foreground">Notifications</h1>
-            <p className="text-sm text-muted-foreground">
-              View and manage your room booking notifications
-            </p>
+      <div className="container mx-auto max-w-4xl px-4 py-8">
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground">Notifications</h1>
+              <p className="text-sm text-muted-foreground">View and manage your room booking notifications</p>
+            </div>
           </div>
-          <Badge variant="outline">
+          <Badge variant="outline" className="text-sm">
             {unreadCount} unread
           </Badge>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-4xl px-6 py-6">
-        <div className="flex flex-col gap-6">
-          {/* Settings Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Notification Settings</CardTitle>
-              <CardDescription>
-                Configure how you receive in-app notifications
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup>
-                <Field className="flex items-center justify-between gap-4">
-                  <div className="flex-1">
+        {/* Notification Settings */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-base">Notification Settings</CardTitle>
+            <CardDescription>Configure how you receive in-app notifications</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup>
+              <Field>
+                <div className="flex items-center justify-between">
+                  <div>
                     <FieldLabel>Enable App Notifications</FieldLabel>
-                    <FieldDescription>
-                      Receive in-app alerts for booking confirmations and declines
-                    </FieldDescription>
+                    <FieldDescription>Receive in-app alerts for booking confirmations and declines</FieldDescription>
                   </div>
-                  <div className="shrink-0">
-                    <Switch
-                      checked={notificationsEnabled}
-                      onCheckedChange={toggleNotifications}
-                    />
-                  </div>
-                </Field>
-              </FieldGroup>
-            </CardContent>
-          </Card>
-
-          {/* Notifications List */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">All Notifications</CardTitle>
-                  <CardDescription>
-                    {filteredNotifications.length} notification{filteredNotifications.length !== 1 ? "s" : ""}
-                  </CardDescription>
+                  <Switch
+                    checked={notificationsEnabled}
+                    onCheckedChange={toggleNotifications}
+                  />
                 </div>
+              </Field>
+            </FieldGroup>
+          </CardContent>
+        </Card>
+
+        {/* All Notifications */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">All Notifications</CardTitle>
+                <CardDescription>{filteredNotifications.length} notifications</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={() => fetchNotifications(readIds)} disabled={isLoading}>
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                </Button>
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={fetchNotifications}
-                    disabled={isLoading}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-                  </Button>
+                  <Filter className="h-4 w-4 text-muted-foreground" />
                   <Select value={filter} onValueChange={setFilter}>
-                    <SelectTrigger className="w-36">
-                      <Filter className="mr-2 h-4 w-4" />
+                    <SelectTrigger className="w-[120px]">
                       <SelectValue placeholder="Filter" />
                     </SelectTrigger>
                     <SelectContent>
@@ -285,130 +265,104 @@ export default function NotificationsPage() {
                       <SelectItem value="unread">Unread</SelectItem>
                       <SelectItem value="accepted">Accepted</SelectItem>
                       <SelectItem value="declined">Declined</SelectItem>
-                      <SelectItem value="subscription">Subscription</SelectItem>
-                      <SelectItem value="system">System</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={markAllAsRead}
-                    disabled={unreadCount === 0}
-                  >
-                    <CheckCheck className="h-4 w-4" />
-                    Mark all read
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 text-destructive hover:text-destructive"
-                    onClick={clearAll}
-                    disabled={notifications.length === 0}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Clear all
-                  </Button>
                 </div>
+                <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={unreadCount === 0}>
+                  <CheckCheck className="mr-2 h-4 w-4" />
+                  Mark all read
+                </Button>
+                <Button variant="outline" size="sm" onClick={clearAll} className="text-destructive hover:text-destructive" disabled={notifications.length === 0}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Clear all
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              {!notificationsEnabled ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <BellOff className="h-12 w-12 text-muted-foreground/30" />
-                  <p className="mt-4 text-lg font-medium text-muted-foreground">Notifications Disabled</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Enable notifications above to receive booking alerts
-                  </p>
-                </div>
-              ) : isLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  <p className="mt-4 text-sm text-muted-foreground">Loading notifications...</p>
-                </div>
-              ) : error ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <AlertCircle className="h-12 w-12 text-destructive/50" />
-                  <p className="mt-4 text-lg font-medium text-muted-foreground">{error}</p>
-                  <Button variant="outline" className="mt-4" onClick={fetchNotifications}>
-                    Try Again
-                  </Button>
-                </div>
-              ) : filteredNotifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Bell className="h-12 w-12 text-muted-foreground/30" />
-                  <p className="mt-4 text-lg font-medium text-muted-foreground">No Notifications</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {filter !== "all" ? "Try changing your filter" : "You're all caught up!"}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col divide-y divide-border">
-                  {filteredNotifications.map((notification) => {
-                    const type = getNotificationType(notification)
-                    const isRead = readIds.has(notification.id)
-
-                    return (
-                      <div
-                        key={notification.id}
-                        className={`flex items-start gap-4 py-4 ${!isRead ? "bg-primary/5 -mx-6 px-6" : ""
-                          }`}
-                      >
-                        <div className="mt-0.5 shrink-0">
-                          {getNotificationIcon(type)}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="mt-2 text-sm text-muted-foreground">Loading notifications...</p>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <AlertCircle className="h-12 w-12 text-destructive/50" />
+                <p className="mt-4 text-lg font-medium text-foreground">{error}</p>
+                <p className="text-sm text-muted-foreground">
+                  {error.includes("not configured")
+                    ? "Please configure Microsoft Graph credentials"
+                    : "Please try again later"}
+                </p>
+                <Button variant="outline" className="mt-4" onClick={() => fetchNotifications(readIds)}>
+                  Try Again
+                </Button>
+              </div>
+            ) : filteredNotifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Bell className="h-12 w-12 text-muted-foreground/50" />
+                <p className="mt-4 text-lg font-medium text-foreground">No Notifications</p>
+                <p className="text-sm text-muted-foreground">
+                  {filter !== "all" ? "Try adjusting your filter" : "You're all caught up!"}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredNotifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`flex items-start justify-between rounded-lg border p-4 transition-colors ${notification.read ? "bg-background" : "bg-muted/30"
+                      }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {getIcon(notification.type)}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-foreground">
+                            {notification.type === "accepted" ? "Booking Confirmed" : "Booking Declined"}
+                          </p>
+                          {!notification.read && (
+                            <span className="h-2 w-2 rounded-full bg-primary" />
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-foreground">{notification.subject}</p>
-                            {!isRead && (
-                              <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
-                            )}
-                          </div>
-                          {notification.body && (
-                            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                              {notification.body}
-                            </p>
-                          )}
-                          {notification.recipient_email && (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              To: {notification.recipient_name || notification.recipient_email}
-                            </p>
-                          )}
-                          <div className="mt-2 flex items-center gap-2">
-                            {getNotificationBadge(type)}
-                            {getStatusBadge(notification.status)}
-                            <span className="text-xs text-muted-foreground">
-                              {formatTimestamp(notification.created_at)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          {!isRead && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => markAsRead(notification.id)}
-                            >
-                              <CheckCheck className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => deleteNotification(notification.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <p className="text-sm text-muted-foreground">{notification.message}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <Badge variant={getBadgeVariant(notification.type)} className="text-xs">
+                            {notification.type === "accepted" ? "Accepted" : "Declined"}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatTimestamp(notification.timestamp)}
+                          </span>
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {!notification.read && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => markAsRead(notification.id)}
+                          title="Mark as read"
+                        >
+                          <CheckCheck className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => clearNotification(notification.id)}
+                        className="text-muted-foreground hover:text-destructive"
+                        title="Remove"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

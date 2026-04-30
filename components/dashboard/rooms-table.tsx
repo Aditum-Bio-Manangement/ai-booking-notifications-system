@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Table,
   TableBody,
@@ -28,14 +28,61 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Search, Filter, Eye, Users, Monitor, MapPin, RefreshCw } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Search, Filter, Eye, Users, Monitor, MapPin, RefreshCw, Bell, BellOff, Clock, Loader2 } from "lucide-react"
 import { Skeleton } from "@/components/ui/loaders"
+import { useToast } from "@/hooks/use-toast"
 import type { Room, Site } from "@/lib/types"
+
+interface Subscription {
+  id: string
+  roomEmail: string
+  resource: string
+  expiresAt: string
+  status: "active" | "expired"
+  autoRenew?: boolean
+}
 
 interface RoomsTableProps {
   rooms: Room[]
   isLoading?: boolean
   onRefresh?: () => void
+}
+
+// Helper to log audit events
+async function logAuditEvent(action: string, resourceType: string, resourceId: string, details?: Record<string, unknown>) {
+  try {
+    await fetch("/api/audit-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action,
+        resource_type: resourceType,
+        resource_id: resourceId,
+        details,
+      }),
+    })
+  } catch (e) {
+    console.error("Failed to log audit event:", e)
+  }
+}
+
+// Helper to calculate time remaining
+function getTimeRemaining(expiresAt: string): string {
+  const now = new Date()
+  const expires = new Date(expiresAt)
+  const diffMs = expires.getTime() - now.getTime()
+
+  if (diffMs <= 0) return "Expired"
+
+  const hours = Math.floor(diffMs / (1000 * 60 * 60))
+  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+
+  if (hours > 24) {
+    const days = Math.floor(hours / 24)
+    return `${days}d ${hours % 24}h`
+  }
+  return `${hours}h ${minutes}m`
 }
 
 // Skeleton row for table loading
@@ -60,6 +107,15 @@ function RoomRowSkeleton() {
       <TableCell>
         <Skeleton className="h-5 w-16 rounded-full" />
       </TableCell>
+      <TableCell>
+        <Skeleton className="h-8 w-24 rounded" />
+      </TableCell>
+      <TableCell className="hidden lg:table-cell">
+        <Skeleton className="h-4 w-16" />
+      </TableCell>
+      <TableCell className="hidden lg:table-cell">
+        <Skeleton className="h-5 w-10 rounded-full" />
+      </TableCell>
       <TableCell className="text-right">
         <Skeleton className="ml-auto h-8 w-8 rounded" />
       </TableCell>
@@ -72,6 +128,96 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
   const [siteFilter, setSiteFilter] = useState<string>("all")
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [loadingSubscriptions, setLoadingSubscriptions] = useState(true)
+  const [subscribingRoom, setSubscribingRoom] = useState<string | null>(null)
+  const [autoRenewSettings, setAutoRenewSettings] = useState<Record<string, boolean>>({})
+  const { toast } = useToast()
+
+  // Fetch subscriptions on mount
+  useEffect(() => {
+    fetchSubscriptions()
+  }, [])
+
+  const fetchSubscriptions = async () => {
+    try {
+      const response = await fetch("/api/subscriptions")
+      const data = await response.json()
+      setSubscriptions(data.subscriptions || [])
+      // Initialize auto-renew settings from localStorage
+      const savedAutoRenew = localStorage.getItem("roomAutoRenew")
+      if (savedAutoRenew) {
+        setAutoRenewSettings(JSON.parse(savedAutoRenew))
+      }
+    } catch (e) {
+      console.error("Failed to fetch subscriptions:", e)
+    } finally {
+      setLoadingSubscriptions(false)
+    }
+  }
+
+  const getSubscriptionForRoom = (roomEmail: string): Subscription | undefined => {
+    return subscriptions.find(sub => sub.roomEmail === roomEmail)
+  }
+
+  const handleSubscribe = async (room: Room) => {
+    if (!room.roomUpn) return
+    setSubscribingRoom(room.roomUpn)
+    try {
+      const response = await fetch("/api/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomEmail: room.roomUpn, durationHours: 72 }),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        toast({ title: "Subscribed", description: `${room.displayName} is now subscribed to notifications` })
+        await logAuditEvent("room.subscribed", "room", room.id, { roomName: room.displayName, roomEmail: room.roomUpn })
+        fetchSubscriptions()
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to subscribe", variant: "destructive" })
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to subscribe room", variant: "destructive" })
+    } finally {
+      setSubscribingRoom(null)
+    }
+  }
+
+  const handleUnsubscribe = async (room: Room, subscriptionId: string) => {
+    if (!room.roomUpn) return
+    setSubscribingRoom(room.roomUpn)
+    try {
+      const response = await fetch("/api/subscriptions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscriptionId }),
+      })
+      if (response.ok) {
+        toast({ title: "Unsubscribed", description: `${room.displayName} notifications disabled` })
+        await logAuditEvent("room.unsubscribed", "room", room.id, { roomName: room.displayName, roomEmail: room.roomUpn })
+        fetchSubscriptions()
+      } else {
+        const data = await response.json()
+        toast({ title: "Error", description: data.error || "Failed to unsubscribe", variant: "destructive" })
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to unsubscribe room", variant: "destructive" })
+    } finally {
+      setSubscribingRoom(null)
+    }
+  }
+
+  const handleAutoRenewToggle = async (roomEmail: string, enabled: boolean) => {
+    const newSettings = { ...autoRenewSettings, [roomEmail]: enabled }
+    setAutoRenewSettings(newSettings)
+    localStorage.setItem("roomAutoRenew", JSON.stringify(newSettings))
+    await logAuditEvent("room.auto_renew_changed", "room", roomEmail, { autoRenew: enabled })
+    toast({
+      title: enabled ? "Auto-Renew Enabled" : "Auto-Renew Disabled",
+      description: `Subscription will ${enabled ? "automatically renew" : "expire without renewal"}`
+    })
+  }
 
   const handleRefresh = async () => {
     if (!onRefresh || isRefreshing) return
@@ -85,15 +231,15 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
   }
 
   // Filter out any null/undefined rooms first, then apply search and site filters
-  const validRooms = Array.isArray(rooms) 
+  const validRooms = Array.isArray(rooms)
     ? rooms.filter((room): room is Room => {
-        return room != null && 
-               typeof room === 'object' && 
-               'id' in room &&
-               typeof room.displayName !== 'object' // Ensure displayName is not an object
-      }) 
+      return room != null &&
+        typeof room === 'object' &&
+        'id' in room &&
+        typeof room.displayName !== 'object' // Ensure displayName is not an object
+    })
     : []
-  
+
   const filteredRooms = validRooms.filter((room) => {
     try {
       const searchLower = search.toLowerCase()
@@ -108,7 +254,7 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
       return false
     }
   })
-  
+
   // Helper to safely render avProfile (could be string or object)
   const formatAvProfile = (avProfile: unknown): string => {
     if (typeof avProfile === 'string') return avProfile
@@ -131,12 +277,12 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
           <div className="flex items-center gap-2">
             <CardTitle className="text-lg">Room Inventory</CardTitle>
             {onRefresh && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={handleRefresh} 
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="h-8 w-8" 
+                className="h-8 w-8"
                 title="Refresh rooms"
               >
                 <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -176,6 +322,9 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
               <TableHead className="hidden sm:table-cell">Capacity</TableHead>
               <TableHead className="hidden md:table-cell">AV Profile</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Subscription</TableHead>
+              <TableHead className="hidden lg:table-cell">Time Left</TableHead>
+              <TableHead className="hidden lg:table-cell">Auto-Renew</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -184,94 +333,174 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
               Array.from({ length: 5 }).map((_, i) => <RoomRowSkeleton key={i} />)
             ) : (
               filteredRooms.map((room) => (
-              <TableRow key={room.id}>
-                <TableCell>
-                  <div>
-                    <p className="font-medium text-foreground">{room.displayName || "Unknown Room"}</p>
-                    <p className="text-xs text-muted-foreground">{room.roomUpn || "N/A"}</p>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="secondary"
-                    className={
-                      room.site === "Cambridge"
-                        ? "bg-[oklch(0.7_0.15_250)]/20 text-[oklch(0.7_0.15_250)]"
-                        : "bg-[oklch(0.75_0.15_80)]/20 text-[oklch(0.75_0.15_80)]"
-                    }
-                  >
-                    {room.site || "Unknown"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1">
-                    <Users className="h-3 w-3 text-muted-foreground" />
-                    <span>{room.capacity ?? "N/A"}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1">
-                    <Monitor className="h-3 w-3 text-muted-foreground" />
-                    <span className="max-w-[200px] truncate text-sm">
-                      {formatAvProfile(room.avProfile)}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={room.isActive ? "default" : "secondary"}
-                    className={
-                      room.isActive
-                        ? "bg-[oklch(0.72_0.19_145)]/20 text-[oklch(0.72_0.19_145)]"
-                        : "bg-muted text-muted-foreground"
-                    }
-                  >
-                    {room.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedRoom(room)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>{room.displayName}</DialogTitle>
-                        <DialogDescription>{room.roomUpn}</DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          <span>
-                            {room.building}, {room.floor}
+                <TableRow key={room.id}>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium text-foreground">{room.displayName || "Unknown Room"}</p>
+                      <p className="text-xs text-muted-foreground">{room.roomUpn || "N/A"}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="secondary"
+                      className={
+                        room.site === "Cambridge"
+                          ? "bg-[oklch(0.7_0.15_250)]/20 text-[oklch(0.7_0.15_250)]"
+                          : "bg-[oklch(0.75_0.15_80)]/20 text-[oklch(0.75_0.15_80)]"
+                      }
+                    >
+                      {room.site || "Unknown"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Users className="h-3 w-3 text-muted-foreground" />
+                      <span>{room.capacity ?? "N/A"}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Monitor className="h-3 w-3 text-muted-foreground" />
+                      <span className="max-w-[200px] truncate text-sm">
+                        {formatAvProfile(room.avProfile)}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={room.isActive ? "default" : "secondary"}
+                      className={
+                        room.isActive
+                          ? "bg-[oklch(0.72_0.19_145)]/20 text-[oklch(0.72_0.19_145)]"
+                          : "bg-muted text-muted-foreground"
+                      }
+                    >
+                      {room.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </TableCell>
+                  {/* Subscription Column */}
+                  <TableCell>
+                    {(() => {
+                      const subscription = getSubscriptionForRoom(room.roomUpn || "")
+                      const isSubscribing = subscribingRoom === room.roomUpn
+
+                      if (loadingSubscriptions) {
+                        return <Skeleton className="h-8 w-24" />
+                      }
+
+                      if (subscription && subscription.status === "active") {
+                        return (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUnsubscribe(room, subscription.id)}
+                            disabled={isSubscribing}
+                            className="gap-1 text-green-600 border-green-200 hover:bg-green-50"
+                          >
+                            {isSubscribing ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Bell className="h-3 w-3" />
+                            )}
+                            <span className="hidden sm:inline">Subscribed</span>
+                          </Button>
+                        )
+                      }
+
+                      return (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSubscribe(room)}
+                          disabled={isSubscribing}
+                          className="gap-1"
+                        >
+                          {isSubscribing ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <BellOff className="h-3 w-3" />
+                          )}
+                          <span className="hidden sm:inline">Subscribe</span>
+                        </Button>
+                      )
+                    })()}
+                  </TableCell>
+                  {/* Time Left Column */}
+                  <TableCell className="hidden lg:table-cell">
+                    {(() => {
+                      const subscription = getSubscriptionForRoom(room.roomUpn || "")
+                      if (!subscription || subscription.status !== "active") {
+                        return <span className="text-muted-foreground">-</span>
+                      }
+                      const timeLeft = getTimeRemaining(subscription.expiresAt)
+                      return (
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          <span className={timeLeft === "Expired" ? "text-red-500" : "text-foreground"}>
+                            {timeLeft}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          <span>Capacity: {room.capacity} people</span>
+                      )
+                    })()}
+                  </TableCell>
+                  {/* Auto-Renew Column */}
+                  <TableCell className="hidden lg:table-cell">
+                    {(() => {
+                      const subscription = getSubscriptionForRoom(room.roomUpn || "")
+                      if (!subscription || subscription.status !== "active") {
+                        return <span className="text-muted-foreground">-</span>
+                      }
+                      return (
+                        <Switch
+                          checked={autoRenewSettings[room.roomUpn || ""] ?? false}
+                          onCheckedChange={(checked) => handleAutoRenewToggle(room.roomUpn || "", checked)}
+                        />
+                      )
+                    })()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedRoom(room)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>{room.displayName}</DialogTitle>
+                          <DialogDescription>{room.roomUpn}</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                            <span>
+                              {room.building}, {room.floor}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                            <span>Capacity: {room.capacity} people</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <Monitor className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                            <span>{formatAvProfile(room.avProfile)}</span>
+                          </div>
+                          <div className="rounded-lg bg-muted p-3">
+                            <p className="text-sm font-medium text-foreground">Access Notes</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {room.accessNotes}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex items-start gap-2">
-                          <Monitor className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <span>{formatAvProfile(room.avProfile)}</span>
-                        </div>
-                        <div className="rounded-lg bg-muted p-3">
-                          <p className="text-sm font-medium text-foreground">Access Notes</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {room.accessNotes}
-                          </p>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </TableCell>
-              </TableRow>
-            ))
+                      </DialogContent>
+                    </Dialog>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>

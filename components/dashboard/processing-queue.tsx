@@ -96,7 +96,13 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
   const isPending = booking.outcome === "pending"
   const isCanceled = booking.outcome === "canceled"
   const emailWasSent = booking.notificationSent === true
-  const emailShouldBeSent = !isPending && !isCanceled && (booking.outcome === "accepted" || booking.outcome === "declined-conflict" || booking.outcome === "declined-policy")
+  // Check all declined variants - API may return just "declined" instead of "declined-conflict"
+  const isDeclined = booking.outcome?.startsWith("declined")
+  const emailShouldBeSent = !isPending && !isCanceled && (booking.outcome === "accepted" || isDeclined)
+
+  // Check if job is stale (older than 2 hours and still processing)
+  const jobAgeMs = Date.now() - createdAtTime
+  const isStale = jobAgeMs > 2 * 60 * 60 * 1000 // 2 hours
 
   // Determine step statuses based on actual state
   const decisionStatus: "completed" | "in-progress" | "pending" | "failed" = isPending ? "pending" : "completed"
@@ -187,10 +193,14 @@ function generateJobFromBooking(booking: BookingEvent): QueueJob {
 
   // Determine overall job status based on actual booking state
   let jobStatus: "processing" | "completed" | "failed" = "completed"
-  if (isPending) {
+  if (isPending && !isStale) {
     jobStatus = "processing"
-  } else if (!isCanceled && emailShouldBeSent && !emailWasSent) {
+  } else if (!isCanceled && emailShouldBeSent && !emailWasSent && !isStale) {
     jobStatus = "processing" // Still waiting for email to be sent
+  }
+  // If stale and was processing, mark as completed (email may have been sent but status not updated)
+  if (isStale && !isPending && !isCanceled) {
+    jobStatus = "completed"
   }
 
   return {
@@ -254,9 +264,12 @@ function JobRow({ job, isExpanded, onToggle, onDelete, onEndWithError }: {
 
   return (
     <div className="border-b border-border last:border-0">
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onToggle}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 cursor-pointer"
       >
         {isExpanded ? (
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -373,7 +386,7 @@ function JobRow({ job, isExpanded, onToggle, onDelete, onEndWithError }: {
             </DropdownMenu>
           )}
         </div>
-      </button>
+      </div>
 
       {/* Expanded details */}
       {isExpanded && (

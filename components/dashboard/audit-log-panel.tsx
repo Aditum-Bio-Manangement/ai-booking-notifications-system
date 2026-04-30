@@ -61,11 +61,12 @@ interface AuditLogEntry {
 
 const ACTION_CATEGORIES = {
     settings: ["settings.updated", "settings.created", "settings.deleted"],
-    subscription: ["subscription.created", "subscription.renewed", "subscription.deleted", "subscription.expired"],
-    notification: ["notification.sent", "notification.failed", "notification.created"],
-    email: ["email.sent", "email.failed", "email.template.updated"],
-    room: ["room.policy.updated", "room.settings.updated"],
+    subscription: ["subscription.created", "subscription.renewed", "subscription.deleted", "subscription.expired", "room.subscribed", "room.unsubscribed", "room.auto_renew_changed"],
+    notification: ["notification.sent", "notification.failed", "notification.created", "test.notification.sent"],
+    email: ["email.sent", "email.failed", "email.template.updated", "email.template.reset"],
+    room: ["room.policy.updated", "room.settings.updated", "rooms.notifications.suppressed", "rooms.notifications.enabled"],
     auth: ["user.login", "user.logout", "user.created"],
+    users: ["users.synced"],
 }
 
 const RESOURCE_TYPES = [
@@ -75,7 +76,10 @@ const RESOURCE_TYPES = [
     "email_template",
     "room_policy",
     "room",
+    "room_settings",
     "user",
+    "users",
+    "email",
 ]
 
 export function AuditLogPanel() {

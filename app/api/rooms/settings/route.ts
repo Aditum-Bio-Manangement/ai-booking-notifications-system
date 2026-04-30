@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getAccessToken, getRoomMailboxes } from "@/lib/microsoft-graph"
+import { db } from "@/lib/db"
 
 // PATCH - Update room mailbox settings to suppress/enable default notifications
 // This controls the automatic calendar processing responses that Exchange sends
@@ -93,6 +94,18 @@ export async function PATCH(request: Request) {
 
         const successCount = results.filter(r => r.success).length
         const failCount = results.filter(r => !r.success).length
+
+        // Log to audit log
+        await db.auditLog.create({
+            action: suppressDefaultNotifications ? "rooms.notifications.suppressed" : "rooms.notifications.enabled",
+            resource_type: "room_settings",
+            details: {
+                suppressDefaultNotifications,
+                successCount,
+                failCount,
+                rooms: results.map(r => r.roomEmail),
+            },
+        })
 
         // Important: Full suppression of Exchange booking emails requires Exchange Admin Center
         // or PowerShell. Graph API can only control automatic replies, not calendar responses.

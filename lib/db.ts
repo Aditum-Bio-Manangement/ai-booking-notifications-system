@@ -331,7 +331,7 @@ export const db = {
     }) {
       try {
         const supabase = getAdminClient()
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('audit_log')
           .insert({
             user_id: entry.user_id || null,
@@ -340,12 +340,16 @@ export const db = {
             resource_type: entry.resource_type || null,
             resource_id: entry.resource_id || null,
             details: entry.details || null,
+            created_at: new Date().toISOString(), // Explicitly set created_at
           })
+          .select()
         if (error) {
-          console.error('Failed to create audit log entry:', error)
+          console.error('[AUDIT LOG] Failed to create entry:', error.message, error.details, error.hint)
+        } else {
+          console.log('[AUDIT LOG] Created entry:', data)
         }
       } catch (e) {
-        console.error('Error creating audit log entry:', e)
+        console.error('[AUDIT LOG] Exception creating entry:', e)
       }
     },
 

@@ -1,73 +1,91 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sendEmail } from "@/lib/microsoft-graph"
 import { renderAcceptedEmail } from "@/lib/email-templates"
+import { db } from "@/lib/db"
 
 // Test endpoint to verify email sending works
 // POST /api/test/send-notification
 export async function POST(request: NextRequest) {
-    try {
-        const body = await request.json()
-        const {
-            toEmail,
-            roomName = "Test Room",
-            subject = "Test Meeting",
-            organizerName = "Test User"
-        } = body
+  try {
+    const body = await request.json()
+    const { 
+      toEmail, 
+      roomName = "Test Room",
+      subject = "Test Meeting",
+      organizerName = "Test User"
+    } = body
 
-        if (!toEmail) {
-            return NextResponse.json(
-                { error: "toEmail is required" },
-                { status: 400 }
-            )
-        }
-
-        const notificationMailbox = process.env.NOTIFICATION_MAILBOX
-        if (!notificationMailbox) {
-            return NextResponse.json(
-                { error: "NOTIFICATION_MAILBOX environment variable is not set" },
-                { status: 500 }
-            )
-        }
-
-        console.log(`[TEST] Sending test notification email`)
-        console.log(`[TEST] From: ${notificationMailbox}`)
-        console.log(`[TEST] To: ${toEmail}`)
-
-        // Generate test email content
-        const htmlContent = renderAcceptedEmail({
-            organizerName,
-            roomName,
-            subject,
-            startTime: new Date().toISOString(),
-            endTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-            timeZone: "America/New_York",
-        })
-
-        // Send the email via Microsoft Graph
-        await sendEmail(
-            notificationMailbox,
-            toEmail,
-            `[TEST] Room Confirmed: ${roomName} - ${subject}`,
-            htmlContent
-        )
-
-        console.log(`[TEST] Email sent successfully!`)
-
-        return NextResponse.json({
-            success: true,
-            message: `Test notification email sent to ${toEmail}`,
-            from: notificationMailbox,
-        })
-    } catch (error) {
-        console.error(`[TEST] Failed to send email:`, error)
-        return NextResponse.json(
-            {
-                error: "Failed to send test email",
-                details: error instanceof Error ? error.message : String(error),
-            },
-            { status: 500 }
-        )
+    if (!toEmail) {
+      return NextResponse.json(
+        { error: "toEmail is required" },
+        { status: 400 }
+      )
     }
+
+    const notificationMailbox = process.env.NOTIFICATION_MAILBOX
+    if (!notificationMailbox) {
+      return NextResponse.json(
+        { error: "NOTIFICATION_MAILBOX environment variable is not set" },
+        { status: 500 }
+      )
+    }
+
+    console.log(`[TEST] Sending test notification email`)
+    console.log(`[TEST] From: ${notificationMailbox}`)
+    console.log(`[TEST] To: ${toEmail}`)
+
+    // Generate test email content
+    const htmlContent = renderAcceptedEmail({
+      organizerName,
+      organizerEmail: toEmail,
+      roomName,
+      subject,
+      startTime: new Date().toISOString(),
+      endTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      timeZone: "America/New_York",
+      attendees: [
+        { name: "Test Attendee 1", email: "attendee1@example.com" },
+        { name: "Test Attendee 2", email: "attendee2@example.com" },
+      ],
+    })
+
+    // Send the email via Microsoft Graph
+    await sendEmail(
+      notificationMailbox,
+      toEmail,
+      `[TEST] Room Confirmed: ${roomName} - ${subject}`,
+      htmlContent
+    )
+
+    console.log(`[TEST] Email sent successfully!`)
+
+    // Log to audit log
+    await db.auditLog.create({
+      action: "test.notification.sent",
+      resource_type: "email",
+      details: { 
+        toEmail,
+        roomName,
+        subject,
+        from: notificationMailbox,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: `Test notification email sent to ${toEmail}`,
+      from: notificationMailbox,
+    })
+  } catch (error) {
+    console.error(`[TEST] Failed to send email:`, error)
+    return NextResponse.json(
+      { 
+        error: "Failed to send test email",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    )
+  }
 }
 
 // GET endpoint to show instructions

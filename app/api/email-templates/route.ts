@@ -225,6 +225,13 @@ export async function DELETE(request: NextRequest) {
             )
         }
 
+        // Log to audit log
+        await db.auditLog.create({
+            action: "email.template.reset",
+            resource_type: "email_template",
+            details: { templateType: type },
+        })
+
         return NextResponse.json({
             success: true,
             message: `${type} template reset to default`,
