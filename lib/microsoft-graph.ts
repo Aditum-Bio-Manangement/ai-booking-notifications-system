@@ -53,16 +53,26 @@ export async function getAccessToken(): Promise<string> {
 
 export async function graphRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit & { advancedQuery?: boolean } = {}
 ): Promise<T> {
   const token = await getAccessToken()
+  const { advancedQuery, ...fetchOptions } = options
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  }
+
+  // Add ConsistencyLevel header for advanced queries (required for endsWith, startsWith, etc.)
+  if (advancedQuery) {
+    headers["ConsistencyLevel"] = "eventual"
+  }
 
   const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
-    ...options,
+    ...fetchOptions,
     headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...options.headers,
+      ...headers,
+      ...(fetchOptions.headers as Record<string, string>),
     },
   })
 
@@ -447,12 +457,46 @@ export async function getUserPhoto(email: string): Promise<string | null> {
   }
 }
 
-// Get all users in the tenant (paginated)
-export async function getUsers(top: number = 100): Promise<GraphUser[]> {
-  const response = await graphRequest<{ value: GraphUser[] }>(
-    `/users?$select=id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department,officeLocation,mobilePhone,businessPhones&$top=${top}&$filter=accountEnabled eq true`
-  )
-  return response.value
+// Response type for paginated user queries
+interface UsersResponse {
+  value: GraphUser[]
+  "@odata.nextLink"?: string
+}
+
+// Get all users in the tenant with pagination and domain filter
+export async function getUsers(options?: {
+  top?: number
+  domain?: string
+  fetchAll?: boolean
+}): Promise<GraphUser[]> {
+  const { top = 100, domain = "aditumbio.com", fetchAll = true } = options || {}
+
+  // Build filter - always filter by enabled accounts and by domain
+  let filter = "accountEnabled eq true"
+  if (domain) {
+    filter += ` and endswith(userPrincipalName,'@${domain}')`
+  }
+
+  const allUsers: GraphUser[] = []
+  // $count=true is required when using advanced query operators like endsWith
+  let nextLink: string | undefined = `/users?$select=id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department,officeLocation,mobilePhone,businessPhones&$top=${top}&$count=true&$filter=${encodeURIComponent(filter)}`
+
+  while (nextLink) {
+    // Use advancedQuery: true because endsWith filter requires ConsistencyLevel: eventual header
+    const response: UsersResponse = await graphRequest<UsersResponse>(nextLink, { advancedQuery: true })
+    allUsers.push(...response.value)
+
+    // Get next page URL if it exists and we want all users
+    if (fetchAll && response["@odata.nextLink"]) {
+      // Extract the path from the full URL
+      const parsedUrl = new URL(response["@odata.nextLink"])
+      nextLink = parsedUrl.pathname.replace("/v1.0", "") + parsedUrl.search
+    } else {
+      nextLink = undefined
+    }
+  }
+
+  return allUsers
 }
 
 // Get user profile with photo combined

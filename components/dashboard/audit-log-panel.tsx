@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import {
     Search,
     Filter,
@@ -41,11 +41,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+
 import { formatInTimeZone } from "date-fns-tz"
 
 interface AuditLogEntry {
@@ -64,9 +60,10 @@ const ACTION_CATEGORIES = {
     subscription: ["subscription.created", "subscription.renewed", "subscription.deleted", "subscription.expired", "room.subscribed", "room.unsubscribed", "room.auto_renew_changed"],
     notification: ["notification.sent", "notification.failed", "notification.created", "test.notification.sent"],
     email: ["email.sent", "email.failed", "email.template.updated", "email.template.reset"],
-    room: ["room.policy.updated", "room.settings.updated", "rooms.notifications.suppressed", "rooms.notifications.enabled"],
+    room: ["room.policy.updated", "room.settings.updated", "rooms.notifications.suppressed", "rooms.notifications.enabled", "room.notifications.updated", "room.notifications.bulk_updated", "room.gal_visibility_changed", "room.settings_update_requested"],
     auth: ["user.login", "user.logout", "user.created"],
     users: ["users.synced"],
+    booking: ["booking.deleted", "booking.marked_failed"],
 }
 
 const RESOURCE_TYPES = [
@@ -80,6 +77,8 @@ const RESOURCE_TYPES = [
     "user",
     "users",
     "email",
+    "auth",
+    "booking",
 ]
 
 export function AuditLogPanel() {
@@ -178,19 +177,20 @@ export function AuditLogPanel() {
         if (action.includes("notification")) return <Bell className="h-4 w-4" />
         if (action.includes("email")) return <Mail className="h-4 w-4" />
         if (action.includes("room")) return <Database className="h-4 w-4" />
-        if (action.includes("user") || action.includes("login")) return <User className="h-4 w-4" />
+        if (action.includes("booking")) return <Calendar className="h-4 w-4" />
+        if (action.includes("user") || action.includes("login") || action.includes("logout")) return <User className="h-4 w-4" />
         if (action.includes("auth")) return <Shield className="h-4 w-4" />
         return <FileText className="h-4 w-4" />
     }
 
     const getActionBadgeVariant = (action: string): "default" | "secondary" | "destructive" | "outline" => {
-        if (action.includes("created") || action.includes("sent") || action.includes("login")) {
+        if (action.includes("created") || action.includes("sent") || action.includes("login") || action.includes("synced")) {
             return "default"
         }
-        if (action.includes("deleted") || action.includes("failed") || action.includes("expired")) {
+        if (action.includes("deleted") || action.includes("failed") || action.includes("expired") || action.includes("logout")) {
             return "destructive"
         }
-        if (action.includes("updated") || action.includes("renewed")) {
+        if (action.includes("updated") || action.includes("renewed") || action.includes("subscribed") || action.includes("changed")) {
             return "secondary"
         }
         return "outline"
@@ -402,29 +402,34 @@ export function AuditLogPanel() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-8"></TableHead>
+                                        <TableHead className="w-10"></TableHead>
                                         <TableHead className="w-[180px]">Date</TableHead>
-                                        <TableHead>User</TableHead>
-                                        <TableHead>Activity</TableHead>
+                                        <TableHead className="w-[200px]">User</TableHead>
+                                        <TableHead className="w-[200px]">Activity</TableHead>
                                         <TableHead>Resource</TableHead>
-                                        <TableHead className="w-[100px]">Status</TableHead>
+                                        <TableHead className="w-[80px] text-center">Status</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {entries.map((entry) => (
-                                        <Collapsible key={entry.id} asChild>
-                                            <>
-                                                <TableRow className="cursor-pointer hover:bg-muted/50">
+                                    {entries.map((entry) => {
+                                        const isExpanded = expandedRows.has(entry.id)
+                                        // Extract resource name from details
+                                        const resourceName = entry.details?.roomName || entry.details?.roomEmail || entry.resource_id
+
+                                        return (
+                                            <React.Fragment key={entry.id}>
+                                                <TableRow
+                                                    className="cursor-pointer hover:bg-muted/50"
+                                                    onClick={() => toggleRow(entry.id)}
+                                                >
                                                     <TableCell>
-                                                        <CollapsibleTrigger asChild onClick={() => toggleRow(entry.id)}>
-                                                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                                                {expandedRows.has(entry.id) ? (
-                                                                    <ChevronDown className="h-4 w-4" />
-                                                                ) : (
-                                                                    <ChevronRight className="h-4 w-4" />
-                                                                )}
-                                                            </Button>
-                                                        </CollapsibleTrigger>
+                                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                                            {isExpanded ? (
+                                                                <ChevronDown className="h-4 w-4" />
+                                                            ) : (
+                                                                <ChevronRight className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
                                                     </TableCell>
                                                     <TableCell className="font-mono text-xs">
                                                         {formatTimestamp(entry.created_at)}
@@ -451,20 +456,20 @@ export function AuditLogPanel() {
                                                                 <Badge variant="outline">
                                                                     {entry.resource_type}
                                                                 </Badge>
-                                                                {entry.resource_id && (
-                                                                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px]">
-                                                                        {entry.resource_id}
+                                                                {resourceName && (
+                                                                    <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={String(resourceName)}>
+                                                                        {String(resourceName)}
                                                                     </span>
                                                                 )}
                                                             </div>
                                                         )}
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell className="text-center">
                                                         {getStatusIcon(entry.action)}
                                                     </TableCell>
                                                 </TableRow>
-                                                <CollapsibleContent asChild>
-                                                    <TableRow className="bg-muted/30">
+                                                {isExpanded && (
+                                                    <TableRow key={`${entry.id}-details`} className="bg-muted/30">
                                                         <TableCell colSpan={6} className="p-4">
                                                             <div className="space-y-2">
                                                                 <h4 className="text-sm font-medium">Details</h4>
@@ -484,10 +489,10 @@ export function AuditLogPanel() {
                                                             </div>
                                                         </TableCell>
                                                     </TableRow>
-                                                </CollapsibleContent>
-                                            </>
-                                        </Collapsible>
-                                    ))}
+                                                )}
+                                            </React.Fragment>
+                                        )
+                                    })}
                                 </TableBody>
                             </Table>
                         </div>

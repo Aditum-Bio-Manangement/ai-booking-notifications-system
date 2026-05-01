@@ -99,6 +99,7 @@ interface AppUser {
   role: 'admin' | 'operator' | 'viewer'
   status: 'active' | 'invited' | 'disabled'
   lastLogin?: string
+  last_login?: string // DB field name
 }
 
 const SETTINGS_STORAGE_KEY = "system-settings"
@@ -146,11 +147,7 @@ const defaultSettings: SystemSettings = {
   },
 }
 
-const mockUsers: AppUser[] = [
-  { id: "1", email: "admin@aditumbio.com", name: "Admin User", role: "admin", status: "active", lastLogin: "2026-03-27T10:00:00Z" },
-  { id: "2", email: "operator@aditumbio.com", name: "Room Operator", role: "operator", status: "active", lastLogin: "2026-03-26T14:30:00Z" },
-  { id: "3", email: "viewer@aditumbio.com", name: "View Only", role: "viewer", status: "active" },
-]
+
 
 function WebhookStatusCard() {
   const { data: webhookStatus } = useSWR<{
@@ -275,7 +272,7 @@ export function SettingsPanel() {
     "/api/subscriptions",
     fetcher
   )
-  const { data: roomsData } = useSWR<{ rooms: Array<{ email: string; name: string }>; configured: boolean }>(
+  const { data: roomsData } = useSWR<{ rooms: Array<{ roomUpn: string; displayName: string; id: string }>; configured: boolean }>(
     "/api/rooms",
     fetcher
   )
@@ -286,10 +283,16 @@ export function SettingsPanel() {
   const [editingSubscription, setEditingSubscription] = useState<{ id: string; roomEmail: string; expiresIn: number } | null>(null)
   const [renewDuration, setRenewDuration] = useState(72)
 
-  // User management state
-  const [users, setUsers] = useState<AppUser[]>(mockUsers)
+  // User management state - fetch from database
+  const { data: usersData, mutate: mutateUsers } = useSWR<{ users: AppUser[] }>(
+    "/api/profiles",
+    fetcher
+  )
+  const users = usersData?.users || []
   const [showAddUser, setShowAddUser] = useState(false)
   const [newUser, setNewUser] = useState<{ email: string; name: string; role: AppUser["role"] }>({ email: "", name: "", role: "viewer" })
+  const [isAddingUser, setIsAddingUser] = useState(false)
+  const [isDeletingUser, setIsDeletingUser] = useState<string | null>(null)
 
   // SMTP test state
   const [showSmtpPassword, setShowSmtpPassword] = useState(false)
@@ -607,19 +610,73 @@ export function SettingsPanel() {
                 <div className="flex flex-col gap-4">
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <Input
-                        placeholder="room@aditumbio.com"
-                        value={newRoomEmail}
-                        onChange={(e) => setNewRoomEmail(e.target.value)}
-                        list="room-emails"
-                      />
-                      <datalist id="room-emails">
-                        {Array.isArray(roomsData?.rooms) && roomsData.rooms.map((room, index) => (
-                          <option key={`room-option-${index}-${room?.email || ''}`} value={room?.email || ''}>
-                            {room?.name || 'Unknown'}
-                          </option>
-                        ))}
-                      </datalist>
+                      <Select value={newRoomEmail} onValueChange={setNewRoomEmail}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a room..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(() => {
+                            // Check if rooms data is still loading
+                            if (!roomsData) {
+                              return (
+                                <SelectItem value="loading" disabled>
+                                  Loading rooms...
+                                </SelectItem>
+                              )
+                            }
+
+                            const rooms = roomsData.rooms || []
+
+                            // If no rooms exist at all
+                            if (rooms.length === 0) {
+                              return (
+                                <SelectItem value="none" disabled>
+                                  No rooms found - fetch rooms first
+                                </SelectItem>
+                              )
+                            }
+
+                            // Get active subscription room emails
+                            const subscriptions = subsData?.subscriptions || []
+                            const activeSubEmails = new Set<string>(
+                              subscriptions
+                                .filter((s: Subscription) => s.status === "active" && s.roomEmail)
+                                .map((s: Subscription) => s.roomEmail!.toLowerCase())
+                            )
+
+                            // Filter rooms that don't have active subscriptions
+                            // Include rooms with valid roomUpn that are NOT in activeSubEmails
+                            const availableRooms = rooms.filter(
+                              (room) => {
+                                if (!room?.roomUpn) return false // Skip rooms without email
+                                return !activeSubEmails.has(room.roomUpn.toLowerCase())
+                              }
+                            )
+
+                            if (availableRooms.length === 0 && rooms.length > 0) {
+                              return (
+                                <SelectItem value="none" disabled>
+                                  All rooms have active subscriptions
+                                </SelectItem>
+                              )
+                            }
+
+                            if (availableRooms.length === 0) {
+                              return (
+                                <SelectItem value="none" disabled>
+                                  No rooms available
+                                </SelectItem>
+                              )
+                            }
+
+                            return availableRooms.map((room, index) => (
+                              <SelectItem key={`room-${index}-${room.roomUpn}`} value={room.roomUpn}>
+                                {room.displayName || room.roomUpn}
+                              </SelectItem>
+                            ))
+                          })()}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <Select value={String(subscriptionDuration)} onValueChange={(v) => setSubscriptionDuration(Number(v))}>
                       <SelectTrigger className="w-36">
@@ -1539,21 +1596,35 @@ Set-CalendarProcessing -Identity "room@aditumbio.com" \\
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setShowAddUser(false)}>Cancel</Button>
-                      <Button onClick={() => {
-                        if (newUser.email && newUser.name) {
-                          setUsers([...users, {
-                            id: crypto.randomUUID(),
-                            email: newUser.email,
-                            name: newUser.name,
-                            role: newUser.role,
-                            status: "invited"
-                          }])
-                          setNewUser({ email: "", name: "", role: "viewer" })
-                          setShowAddUser(false)
-                          setHasChanges(true)
-                        }
-                      }}>
-                        Send Invite
+                      <Button
+                        disabled={isAddingUser || !newUser.email || !newUser.name}
+                        onClick={async () => {
+                          if (newUser.email && newUser.name) {
+                            setIsAddingUser(true)
+                            try {
+                              const response = await fetch("/api/profiles", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(newUser),
+                              })
+                              if (response.ok) {
+                                mutateUsers()
+                                setNewUser({ email: "", name: "", role: "viewer" })
+                                setShowAddUser(false)
+                              } else {
+                                const error = await response.json()
+                                alert(error.error || "Failed to add user")
+                              }
+                            } catch (e) {
+                              console.error("Failed to add user:", e)
+                              alert("Failed to add user")
+                            } finally {
+                              setIsAddingUser(false)
+                            }
+                          }
+                        }}
+                      >
+                        {isAddingUser ? "Adding..." : "Send Invite"}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -1584,9 +1655,17 @@ Set-CalendarProcessing -Identity "room@aditumbio.com" \\
                         <td className="p-3">
                           <Select
                             value={user.role}
-                            onValueChange={(value: "admin" | "operator" | "viewer") => {
-                              setUsers(users.map(u => u.id === user.id ? { ...u, role: value } : u))
-                              setHasChanges(true)
+                            onValueChange={async (value: "admin" | "operator" | "viewer") => {
+                              try {
+                                await fetch("/api/profiles", {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ id: user.id, role: value }),
+                                })
+                                mutateUsers()
+                              } catch (e) {
+                                console.error("Failed to update role:", e)
+                              }
                             }}
                           >
                             <SelectTrigger className="w-32">
@@ -1611,9 +1690,19 @@ Set-CalendarProcessing -Identity "room@aditumbio.com" \\
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => {
-                              setUsers(users.filter(u => u.id !== user.id))
-                              setHasChanges(true)
+                            disabled={isDeletingUser === user.id}
+                            onClick={async () => {
+                              if (confirm(`Are you sure you want to remove ${user.name}?`)) {
+                                setIsDeletingUser(user.id)
+                                try {
+                                  await fetch(`/api/profiles?id=${user.id}`, { method: "DELETE" })
+                                  mutateUsers()
+                                } catch (e) {
+                                  console.error("Failed to delete user:", e)
+                                } finally {
+                                  setIsDeletingUser(null)
+                                }
+                              }
                             }}
                             className="text-destructive hover:text-destructive"
                           >

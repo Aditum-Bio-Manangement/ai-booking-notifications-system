@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -41,6 +42,7 @@ interface M365User {
 }
 
 export function UserManagement() {
+  const { user } = useAuth()
   const [users, setUsers] = useState<M365User[]>([])
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
@@ -70,21 +72,25 @@ export function UserManagement() {
 
   const syncSelectedUsers = async () => {
     if (selectedUsers.size === 0) return
-    
+
     setIsSyncing(true)
     setSyncStatus(null)
     try {
       const response = await fetch("/api/users/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds: Array.from(selectedUsers) }),
+        body: JSON.stringify({
+          userIds: Array.from(selectedUsers),
+          actorEmail: user?.email,
+          actorId: user?.id,
+        }),
       })
-      
+
       if (response.ok) {
         const data = await response.json()
-        setSyncStatus({ 
-          success: true, 
-          message: `Successfully synced ${data.syncedCount} users with profile photos` 
+        setSyncStatus({
+          success: true,
+          message: `Successfully synced ${data.syncedCount} users with profile photos`
         })
         setSelectedUsers(new Set())
       } else {
@@ -117,7 +123,7 @@ export function UserManagement() {
     setSelectedUsers(newSet)
   }
 
-  const filteredUsers = users.filter(user => 
+  const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(search.toLowerCase()) ||
     user.email.toLowerCase().includes(search.toLowerCase()) ||
     (user.department?.toLowerCase().includes(search.toLowerCase()))
@@ -138,13 +144,18 @@ export function UserManagement() {
         <div>
           <h2 className="text-xl font-semibold text-foreground">User Management</h2>
           <p className="text-sm text-muted-foreground">
-            Sync user profiles and photos from Microsoft 365
+            Sync user profiles and photos from Microsoft 365 (@aditumbio.com users only)
           </p>
+          {users.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {users.length} users loaded • {filteredUsers.length} shown
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            onClick={fetchUsers} 
+          <Button
+            variant="outline"
+            onClick={fetchUsers}
             disabled={isLoading}
             className="gap-2"
           >
@@ -155,8 +166,8 @@ export function UserManagement() {
             )}
             {isLoading ? "Loading..." : "Fetch from M365"}
           </Button>
-          <Button 
-            onClick={syncSelectedUsers} 
+          <Button
+            onClick={syncSelectedUsers}
             disabled={selectedUsers.size === 0 || isSyncing}
             className="gap-2"
           >
@@ -171,11 +182,10 @@ export function UserManagement() {
       </div>
 
       {syncStatus && (
-        <div className={`rounded-lg border p-4 ${
-          syncStatus.success 
-            ? "border-[oklch(0.72_0.19_145)] bg-[oklch(0.72_0.19_145)]/10" 
+        <div className={`rounded-lg border p-4 ${syncStatus.success
+            ? "border-[oklch(0.72_0.19_145)] bg-[oklch(0.72_0.19_145)]/10"
             : "border-destructive bg-destructive/10"
-        }`}>
+          }`}>
           <div className="flex items-center gap-2">
             {syncStatus.success ? (
               <CheckCircle2 className="h-5 w-5 text-[oklch(0.72_0.19_145)]" />
@@ -212,9 +222,9 @@ export function UserManagement() {
             </div>
           </div>
           <CardDescription>
-            {users.length === 0 
-              ? "Click 'Fetch from M365' to load users from your Microsoft 365 tenant"
-              : "Select users to sync their profile data and photos to your local database"
+            {users.length === 0
+              ? "Click 'Fetch from M365' to load all @aditumbio.com users from your Microsoft 365 tenant"
+              : `Showing ${filteredUsers.length} of ${users.length} @aditumbio.com users. Select users to sync their profile data and photos.`
             }
           </CardDescription>
         </CardHeader>

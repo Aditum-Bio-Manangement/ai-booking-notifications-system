@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -19,20 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { Search, Filter, Eye, Users, Monitor, MapPin, RefreshCw, Bell, BellOff, Clock, Loader2 } from "lucide-react"
+import { Search, Filter, Eye, Users, Monitor, RefreshCw, Bell, BellOff, Clock, Loader2, CheckSquare, X } from "lucide-react"
 import { Skeleton } from "@/components/ui/loaders"
 import { useToast } from "@/hooks/use-toast"
-import type { Room, Site } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
+import { RoomDetailSheet } from "./room-detail-sheet"
+import type { Room } from "@/lib/types"
 
 interface Subscription {
   id: string
@@ -49,23 +44,7 @@ interface RoomsTableProps {
   onRefresh?: () => void
 }
 
-// Helper to log audit events
-async function logAuditEvent(action: string, resourceType: string, resourceId: string, details?: Record<string, unknown>) {
-  try {
-    await fetch("/api/audit-log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action,
-        resource_type: resourceType,
-        resource_id: resourceId,
-        details,
-      }),
-    })
-  } catch (e) {
-    console.error("Failed to log audit event:", e)
-  }
-}
+
 
 // Helper to calculate time remaining
 function getTimeRemaining(expiresAt: string): string {
@@ -89,6 +68,9 @@ function getTimeRemaining(expiresAt: string): string {
 function RoomRowSkeleton() {
   return (
     <TableRow>
+      <TableCell>
+        <Skeleton className="h-4 w-4" />
+      </TableCell>
       <TableCell>
         <div className="space-y-2">
           <Skeleton className="h-4 w-32" />
@@ -127,12 +109,36 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
   const [search, setSearch] = useState("")
   const [siteFilter, setSiteFilter] = useState<string>("all")
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(true)
   const [subscribingRoom, setSubscribingRoom] = useState<string | null>(null)
   const [autoRenewSettings, setAutoRenewSettings] = useState<Record<string, boolean>>({})
+  const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set())
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
   const { toast } = useToast()
+  const { user } = useAuth()
+
+  // Helper to log audit events with user info
+  const logAuditEvent = async (action: string, resourceType: string, resourceId: string, details?: Record<string, unknown>) => {
+    try {
+      await fetch("/api/audit-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          resource_type: resourceType,
+          resource_id: resourceId,
+          user_id: user?.id || null,
+          user_email: user?.email || null,
+          details,
+        }),
+      })
+    } catch (e) {
+      console.error("Failed to log audit event:", e)
+    }
+  }
 
   // Fetch subscriptions on mount
   useEffect(() => {
@@ -255,6 +261,149 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
     }
   })
 
+  // Selection handlers
+  const toggleRoomSelection = (roomId: string) => {
+    setSelectedRoomIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(roomId)) {
+        newSet.delete(roomId)
+      } else {
+        newSet.add(roomId)
+      }
+      return newSet
+    })
+  }
+
+  const toggleAllSelection = () => {
+    if (selectedRoomIds.size === filteredRooms.length) {
+      setSelectedRoomIds(new Set())
+    } else {
+      setSelectedRoomIds(new Set(filteredRooms.map(r => r.id)))
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedRoomIds(new Set())
+  }
+
+  // Bulk action handlers
+  const handleBulkSubscribe = async () => {
+    setBulkActionLoading(true)
+    const roomsToSubscribe = filteredRooms.filter(r =>
+      selectedRoomIds.has(r.id) &&
+      !getSubscriptionForRoom(r.roomUpn || "")
+    )
+
+    let successCount = 0
+    let failCount = 0
+
+    for (const room of roomsToSubscribe) {
+      try {
+        const response = await fetch("/api/subscriptions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomEmail: room.roomUpn, durationHours: 72 }),
+        })
+        if (response.ok) {
+          successCount++
+          await logAuditEvent("room.subscribed", "room", room.id, {
+            roomName: room.displayName,
+            roomEmail: room.roomUpn,
+            bulkAction: true
+          })
+        } else {
+          failCount++
+        }
+      } catch {
+        failCount++
+      }
+    }
+
+    await fetchSubscriptions()
+    setBulkActionLoading(false)
+    clearSelection()
+    toast({
+      title: "Bulk Subscribe Complete",
+      description: `${successCount} rooms subscribed, ${failCount} failed`,
+    })
+  }
+
+  const handleBulkUnsubscribe = async () => {
+    setBulkActionLoading(true)
+    const roomsToUnsubscribe = filteredRooms.filter(r => {
+      const sub = getSubscriptionForRoom(r.roomUpn || "")
+      return selectedRoomIds.has(r.id) && sub?.status === "active"
+    })
+
+    let successCount = 0
+    let failCount = 0
+
+    for (const room of roomsToUnsubscribe) {
+      const subscription = getSubscriptionForRoom(room.roomUpn || "")
+      if (!subscription) continue
+
+      try {
+        const response = await fetch("/api/subscriptions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscriptionId: subscription.id }),
+        })
+        if (response.ok) {
+          successCount++
+          await logAuditEvent("room.unsubscribed", "room", room.id, {
+            roomName: room.displayName,
+            roomEmail: room.roomUpn,
+            bulkAction: true
+          })
+        } else {
+          failCount++
+        }
+      } catch {
+        failCount++
+      }
+    }
+
+    await fetchSubscriptions()
+    setBulkActionLoading(false)
+    clearSelection()
+    toast({
+      title: "Bulk Unsubscribe Complete",
+      description: `${successCount} rooms unsubscribed, ${failCount} failed`,
+    })
+  }
+
+  const handleBulkAutoRenew = async (enabled: boolean) => {
+    setBulkActionLoading(true)
+    const newSettings = { ...autoRenewSettings }
+
+    for (const roomId of selectedRoomIds) {
+      const room = filteredRooms.find(r => r.id === roomId)
+      if (room?.roomUpn && getSubscriptionForRoom(room.roomUpn)) {
+        newSettings[room.roomUpn] = enabled
+        await logAuditEvent("room.auto_renew_changed", "room", roomId, {
+          autoRenew: enabled,
+          roomEmail: room.roomUpn,
+          bulkAction: true
+        })
+      }
+    }
+
+    setAutoRenewSettings(newSettings)
+    localStorage.setItem("roomAutoRenew", JSON.stringify(newSettings))
+    setBulkActionLoading(false)
+    clearSelection()
+    toast({
+      title: enabled ? "Auto-Renew Enabled" : "Auto-Renew Disabled",
+      description: `Updated ${selectedRoomIds.size} rooms`,
+    })
+  }
+
+  // Room detail sheet handlers
+  const openRoomDetails = (room: Room) => {
+    setSelectedRoom(room)
+    setSheetOpen(true)
+  }
+
   // Helper to safely render avProfile (could be string or object)
   const formatAvProfile = (avProfile: unknown): string => {
     if (typeof avProfile === 'string') return avProfile
@@ -314,9 +463,68 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
         </div>
       </CardHeader>
       <CardContent className="overflow-x-auto">
-        <Table className="min-w-[600px]">
+        {/* Bulk Actions Toolbar */}
+        {selectedRoomIds.size > 0 && (
+          <div className="mb-4 flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
+            <CheckSquare className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">{selectedRoomIds.size} room{selectedRoomIds.size > 1 ? "s" : ""} selected</span>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkSubscribe}
+                disabled={bulkActionLoading}
+              >
+                {bulkActionLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Bell className="h-3 w-3 mr-1" />}
+                Subscribe All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkUnsubscribe}
+                disabled={bulkActionLoading}
+              >
+                {bulkActionLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <BellOff className="h-3 w-3 mr-1" />}
+                Unsubscribe All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkAutoRenew(true)}
+                disabled={bulkActionLoading}
+              >
+                Enable Auto-Renew
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkAutoRenew(false)}
+                disabled={bulkActionLoading}
+              >
+                Disable Auto-Renew
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearSelection}
+              >
+                <X className="h-3 w-3 mr-1" />
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <Table className="min-w-[800px]">
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  checked={selectedRoomIds.size === filteredRooms.length && filteredRooms.length > 0}
+                  onCheckedChange={toggleAllSelection}
+                  aria-label="Select all rooms"
+                />
+              </TableHead>
               <TableHead>Room</TableHead>
               <TableHead>Site</TableHead>
               <TableHead className="hidden sm:table-cell">Capacity</TableHead>
@@ -333,7 +541,14 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
               Array.from({ length: 5 }).map((_, i) => <RoomRowSkeleton key={i} />)
             ) : (
               filteredRooms.map((room) => (
-                <TableRow key={room.id}>
+                <TableRow key={room.id} className={selectedRoomIds.has(room.id) ? "bg-muted/50" : ""}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedRoomIds.has(room.id)}
+                      onCheckedChange={() => toggleRoomSelection(room.id)}
+                      aria-label={`Select ${room.displayName}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div>
                       <p className="font-medium text-foreground">{room.displayName || "Unknown Room"}</p>
@@ -459,45 +674,13 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
                     })()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedRoom(room)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                          <DialogTitle>{room.displayName}</DialogTitle>
-                          <DialogDescription>{room.roomUpn}</DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span>
-                              {room.building}, {room.floor}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            <span>Capacity: {room.capacity} people</span>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <Monitor className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                            <span>{formatAvProfile(room.avProfile)}</span>
-                          </div>
-                          <div className="rounded-lg bg-muted p-3">
-                            <p className="text-sm font-medium text-foreground">Access Notes</p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {room.accessNotes}
-                            </p>
-                          </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openRoomDetails(room)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -510,6 +693,29 @@ export function RoomsTable({ rooms, isLoading = false, onRefresh }: RoomsTablePr
           </div>
         )}
       </CardContent>
+
+      {/* Room Detail Sheet */}
+      <RoomDetailSheet
+        room={selectedRoom}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        subscription={selectedRoom ? getSubscriptionForRoom(selectedRoom.roomUpn || "") : undefined}
+        autoRenew={selectedRoom ? autoRenewSettings[selectedRoom.roomUpn || ""] : false}
+        onSubscribe={async () => {
+          if (selectedRoom) await handleSubscribe(selectedRoom)
+        }}
+        onUnsubscribe={async () => {
+          if (selectedRoom) {
+            const sub = getSubscriptionForRoom(selectedRoom.roomUpn || "")
+            if (sub) await handleUnsubscribe(selectedRoom, sub.id)
+          }
+        }}
+        onAutoRenewChange={async (enabled) => {
+          if (selectedRoom?.roomUpn) {
+            await handleAutoRenewToggle(selectedRoom.roomUpn, enabled)
+          }
+        }}
+      />
     </Card>
   )
 }
