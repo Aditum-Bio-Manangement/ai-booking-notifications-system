@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendTestEmail, getEmailConfig, verifySmtpConnection, type EmailConfig } from '@/lib/email'
+import { createAuditLog, getAuditContext } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { to, subject, html, variables, smtpConfig } = body
+    const { actorId, actorEmail } = getAuditContext(body)
 
     if (!to) {
       return NextResponse.json(
@@ -22,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     // Use provided SMTP config or fall back to environment variables
     let config: EmailConfig | null = null
-    
+
     if (smtpConfig) {
       config = {
         host: smtpConfig.host,
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     if (!config) {
       return NextResponse.json(
-        { 
+        {
           error: 'SMTP not configured',
           message: 'Please configure SMTP settings in System Settings or set SMTP environment variables.',
         },
@@ -62,6 +64,15 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Log to audit log
+    await createAuditLog({
+      action: "email.test_sent",
+      actorId,
+      actorEmail,
+      resourceType: "email",
+      details: { to, subject: subject?.substring(0, 50) },
+    })
 
     return NextResponse.json({
       success: true,
@@ -91,7 +102,7 @@ export async function PUT(request: NextRequest) {
           { status: 503 }
         )
       }
-      
+
       const result = await verifySmtpConnection(config)
       return NextResponse.json(result)
     }

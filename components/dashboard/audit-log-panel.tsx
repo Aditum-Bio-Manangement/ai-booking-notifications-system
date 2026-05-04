@@ -56,13 +56,15 @@ interface AuditLogEntry {
 }
 
 const ACTION_CATEGORIES = {
-    settings: ["settings.updated", "settings.created", "settings.deleted"],
+    settings: ["settings.updated", "settings.created", "settings.deleted", "settings.notifications_updated", "settings.smtp_updated", "settings.sso_updated", "settings.general_updated"],
     subscription: ["subscription.created", "subscription.renewed", "subscription.deleted", "subscription.expired", "room.subscribed", "room.unsubscribed", "room.auto_renew_changed"],
-    notification: ["notification.sent", "notification.failed", "notification.created", "test.notification.sent"],
-    email: ["email.sent", "email.failed", "email.template.updated", "email.template.reset"],
-    room: ["room.policy.updated", "room.settings.updated", "rooms.notifications.suppressed", "rooms.notifications.enabled", "room.notifications.updated", "room.notifications.bulk_updated", "room.gal_visibility_changed", "room.settings_update_requested"],
-    auth: ["user.login", "user.logout", "user.created"],
+    notification: ["notification.sent", "notification.failed", "notification.created", "notification.resent", "notification.deleted", "test.notification.sent"],
+    email: ["email.sent", "email.failed", "email.template.updated", "email.template.reset", "email.test_sent"],
+    room: ["room.policy.updated", "room.settings.updated", "room.settings_updated", "rooms.notifications.suppressed", "rooms.notifications.enabled", "room.notifications.updated", "room.notifications.bulk_updated", "room.gal_visibility_changed", "room.delegate_changed"],
+    auth: ["user.login", "user.logout", "user.login_failed", "user.created", "user.updated", "user.deleted", "user.role_changed"],
     users: ["users.synced"],
+    queue: ["queue.item_deleted", "queue.cleared"],
+    calendar: ["calendar.event_processed", "calendar.event_accepted", "calendar.event_declined"],
     booking: ["booking.deleted", "booking.marked_failed"],
 }
 
@@ -71,13 +73,15 @@ const RESOURCE_TYPES = [
     "subscription",
     "notification",
     "email_template",
+    "email",
     "room_policy",
     "room",
     "room_settings",
     "user",
     "users",
-    "email",
     "auth",
+    "queue",
+    "calendar",
     "booking",
 ]
 
@@ -173,13 +177,15 @@ export function AuditLogPanel() {
 
     const getActionIcon = (action: string) => {
         if (action.includes("settings")) return <Settings className="h-4 w-4" />
-        if (action.includes("subscription")) return <Bell className="h-4 w-4" />
+        if (action.includes("subscribed") || action.includes("subscription")) return <Bell className="h-4 w-4" />
         if (action.includes("notification")) return <Bell className="h-4 w-4" />
-        if (action.includes("email")) return <Mail className="h-4 w-4" />
+        if (action.includes("email") || action.includes("template")) return <Mail className="h-4 w-4" />
         if (action.includes("room")) return <Database className="h-4 w-4" />
-        if (action.includes("booking")) return <Calendar className="h-4 w-4" />
+        if (action.includes("booking") || action.includes("calendar")) return <Calendar className="h-4 w-4" />
+        if (action.includes("queue")) return <Database className="h-4 w-4" />
         if (action.includes("user") || action.includes("login") || action.includes("logout")) return <User className="h-4 w-4" />
         if (action.includes("auth")) return <Shield className="h-4 w-4" />
+        if (action.includes("sync")) return <User className="h-4 w-4" />
         return <FileText className="h-4 w-4" />
     }
 
@@ -197,13 +203,13 @@ export function AuditLogPanel() {
     }
 
     const getStatusIcon = (action: string) => {
-        if (action.includes("created") || action.includes("sent") || action.includes("login") || action.includes("renewed")) {
+        if (action.includes("created") || action.includes("sent") || action.includes("login") || action.includes("renewed") || action.includes("subscribed") || action.includes("synced") || action.includes("accepted")) {
             return <CheckCircle2 className="h-4 w-4 text-[oklch(0.72_0.19_145)]" />
         }
-        if (action.includes("deleted") || action.includes("failed") || action.includes("expired")) {
+        if (action.includes("deleted") || action.includes("failed") || action.includes("expired") || action.includes("unsubscribed") || action.includes("declined") || action.includes("logout")) {
             return <XCircle className="h-4 w-4 text-destructive" />
         }
-        if (action.includes("updated")) {
+        if (action.includes("updated") || action.includes("changed") || action.includes("reset")) {
             return <Clock className="h-4 w-4 text-warning" />
         }
         return <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -413,8 +419,13 @@ export function AuditLogPanel() {
                                 <TableBody>
                                     {entries.map((entry) => {
                                         const isExpanded = expandedRows.has(entry.id)
-                                        // Extract resource name from details
-                                        const resourceName = entry.details?.roomName || entry.details?.roomEmail || entry.resource_id
+                                        // Extract resource name from details - prioritize resourceName, then roomName, roomEmail, templateType, sections
+                                        const resourceName = entry.details?.resourceName ||
+                                            entry.details?.roomName ||
+                                            entry.details?.roomEmail ||
+                                            entry.details?.templateType ||
+                                            (entry.details?.sections ? `${(entry.details.sections as string[]).join(", ")}` : null) ||
+                                            entry.resource_id
 
                                         return (
                                             <React.Fragment key={entry.id}>

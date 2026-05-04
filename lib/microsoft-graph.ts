@@ -170,6 +170,26 @@ export interface CalendarEvent {
   isCancelled?: boolean
   createdDateTime: string
   lastModifiedDateTime: string
+  // Recurrence fields
+  type?: "singleInstance" | "occurrence" | "exception" | "seriesMaster"
+  seriesMasterId?: string
+  recurrence?: {
+    pattern: {
+      type: "daily" | "weekly" | "absoluteMonthly" | "relativeMonthly" | "absoluteYearly" | "relativeYearly"
+      interval: number
+      daysOfWeek?: string[]
+      dayOfMonth?: number
+      month?: number
+      firstDayOfWeek?: string
+      index?: "first" | "second" | "third" | "fourth" | "last"
+    }
+    range: {
+      type: "endDate" | "noEnd" | "numbered"
+      startDate: string
+      endDate?: string
+      numberOfOccurrences?: number
+    }
+  }
 }
 
 export interface GraphSubscription {
@@ -186,6 +206,86 @@ export interface GraphSubscription {
 export async function getRoomMailboxes(): Promise<RoomMailbox[]> {
   const response = await graphRequest<{ value: RoomMailbox[] }>("/places/microsoft.graph.room")
   return response.value
+}
+
+// Format recurrence pattern to human-readable string
+export function formatRecurrencePattern(recurrence: CalendarEvent["recurrence"]): string {
+  if (!recurrence) return ""
+
+  const { pattern, range } = recurrence
+  const daysOfWeek = pattern.daysOfWeek || []
+
+  // Format days of week
+  const dayNames: Record<string, string> = {
+    sunday: "Sunday",
+    monday: "Monday",
+    tuesday: "Tuesday",
+    wednesday: "Wednesday",
+    thursday: "Thursday",
+    friday: "Friday",
+    saturday: "Saturday",
+  }
+
+  let patternText = ""
+
+  switch (pattern.type) {
+    case "daily":
+      patternText = pattern.interval === 1 ? "Daily" : `Every ${pattern.interval} days`
+      break
+    case "weekly":
+      const dayList = daysOfWeek.map(d => dayNames[d.toLowerCase()] || d).join(", ")
+      patternText = pattern.interval === 1
+        ? `Weekly on ${dayList}`
+        : `Every ${pattern.interval} weeks on ${dayList}`
+      break
+    case "absoluteMonthly":
+      patternText = pattern.interval === 1
+        ? `Monthly on day ${pattern.dayOfMonth}`
+        : `Every ${pattern.interval} months on day ${pattern.dayOfMonth}`
+      break
+    case "relativeMonthly":
+      const indexName = pattern.index ? pattern.index.charAt(0).toUpperCase() + pattern.index.slice(1) : ""
+      const relDays = daysOfWeek.map(d => dayNames[d.toLowerCase()] || d).join(", ")
+      patternText = `Monthly on the ${indexName.toLowerCase()} ${relDays}`
+      break
+    case "absoluteYearly":
+      patternText = `Yearly on day ${pattern.dayOfMonth}`
+      break
+    case "relativeYearly":
+      patternText = `Yearly`
+      break
+    default:
+      patternText = "Recurring"
+  }
+
+  return patternText
+}
+
+// Format series date range
+export function formatSeriesDateRange(recurrence: CalendarEvent["recurrence"], timeZone: string = "America/New_York"): { startDate: string; endDate: string } {
+  if (!recurrence) return { startDate: "", endDate: "" }
+
+  const { range } = recurrence
+  const options: Intl.DateTimeFormatOptions = {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }
+
+  const startDate = new Date(range.startDate + "T00:00:00")
+  const formattedStart = startDate.toLocaleDateString("en-US", options)
+
+  let formattedEnd = ""
+  if (range.type === "endDate" && range.endDate) {
+    const endDate = new Date(range.endDate + "T00:00:00")
+    formattedEnd = endDate.toLocaleDateString("en-US", options)
+  } else if (range.type === "noEnd") {
+    formattedEnd = "No end date"
+  } else if (range.type === "numbered" && range.numberOfOccurrences) {
+    formattedEnd = `${range.numberOfOccurrences} occurrences`
+  }
+
+  return { startDate: formattedStart, endDate: formattedEnd }
 }
 
 // Fetch calendar events for a room mailbox
@@ -212,7 +312,52 @@ export async function getRoomEvent(
   roomEmail: string,
   eventId: string
 ): Promise<CalendarEvent> {
-  return graphRequest<CalendarEvent>(`/users/${roomEmail}/events/${eventId}`)
+  // Request all fields including recurrence data for series detection
+  const params = new URLSearchParams({
+    $select: "id,subject,body,start,end,location,organizer,attendees,responseStatus,isCancelled,createdDateTime,lastModifiedDateTime,type,seriesMasterId,recurrence",
+  })
+  return graphRequest<CalendarEvent>(`/users/${roomEmail}/events/${eventId}?${params}`)
+}
+
+// Get all occurrences of a recurring series that were declined (conflicts)
+export async function getSeriesConflicts(
+  roomEmail: string,
+  seriesMasterId: string,
+  startDateTime: string,
+  endDateTime: string
+): Promise<CalendarEvent[]> {
+  console.log(`[GRAPH] Getting series conflicts for ${seriesMasterId} from ${startDateTime} to ${endDateTime}`)
+
+  // Get instances of the series within the date range
+  const params = new URLSearchParams({
+    startDateTime,
+    endDateTime,
+    $select: "id,subject,start,end,responseStatus,type,seriesMasterId",
+  })
+
+  try {
+    const response = await graphRequest<{ value: CalendarEvent[] }>(
+      `/users/${roomEmail}/events/${seriesMasterId}/instances?${params}`
+    )
+
+    console.log(`[GRAPH] Found ${response.value?.length || 0} series instances`)
+
+    // Log response statuses for debugging
+    response.value?.forEach(event => {
+      console.log(`[GRAPH] Instance ${event.start?.dateTime}: status=${event.responseStatus?.response}`)
+    })
+
+    // Filter for declined occurrences
+    const declined = response.value.filter(event =>
+      event.responseStatus?.response === "declined"
+    )
+
+    console.log(`[GRAPH] Found ${declined.length} declined occurrences`)
+    return declined
+  } catch (error) {
+    console.error(`[GRAPH] Failed to get series conflicts:`, error)
+    return []
+  }
 }
 
 // Get a user's timezone from their mailbox settings

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
+import { createAuditLog } from '@/lib/audit'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -18,8 +19,20 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error && data.user) {
+      // Log the successful SSO login
+      await createAuditLog({
+        action: "user.login",
+        actorId: data.user.id,
+        actorEmail: data.user.email || undefined,
+        resourceType: "auth",
+        details: {
+          method: "microsoft_sso",
+          provider: "azure",
+        },
+      })
+
       return NextResponse.redirect(`${siteUrl}${next}`)
     }
   }

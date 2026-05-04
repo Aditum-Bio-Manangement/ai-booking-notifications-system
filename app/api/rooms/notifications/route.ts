@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { disableRoomAutoReply } from "@/lib/microsoft-graph"
+import { createAuditLog, getAuditContext } from "@/lib/audit"
 
 // Get notification settings for all rooms or a specific room
 export async function GET(request: NextRequest) {
@@ -58,9 +59,11 @@ export async function POST(request: NextRequest) {
     const {
       roomId,
       roomEmail,
+      roomName,
       customNotificationsEnabled,
       suppressExchangeNotifications
     } = body
+    const { actorId, actorEmail } = getAuditContext(body)
 
     if (!roomId) {
       return NextResponse.json(
@@ -96,6 +99,22 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
+    // Log to audit log with actor info
+    await createAuditLog({
+      action: "room.notifications.updated",
+      actorId,
+      actorEmail,
+      resourceType: "room",
+      resourceId: roomId,
+      resourceName: roomName || roomEmail || roomId,
+      details: {
+        roomEmail,
+        roomName,
+        customNotificationsEnabled,
+        suppressExchangeNotifications,
+      },
+    })
+
     return NextResponse.json({
       success: true,
       settings: data,
@@ -123,6 +142,7 @@ export async function PUT(request: NextRequest) {
       suppressExchangeNotifications,
       roomEmails // Array of {id, email} objects
     } = body
+    const { actorId, actorEmail } = getAuditContext(body)
 
     if (!roomIds || !Array.isArray(roomIds)) {
       return NextResponse.json(
@@ -163,6 +183,20 @@ export async function PUT(request: NextRequest) {
       .select()
 
     if (error) throw error
+
+    // Log to audit log with actor info
+    await createAuditLog({
+      action: "room.notifications.bulk_updated",
+      actorId,
+      actorEmail,
+      resourceType: "room",
+      details: {
+        roomIds,
+        customNotificationsEnabled,
+        suppressExchangeNotifications,
+        updatedCount: roomIds.length,
+      },
+    })
 
     return NextResponse.json({
       success: true,

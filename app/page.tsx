@@ -24,10 +24,12 @@ import {
   aiInsights,
 } from "@/lib/mock-data"
 import type { Room, BookingEvent, DashboardMetrics } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 export default function DashboardPage() {
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState("overview")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -70,12 +72,16 @@ export default function DashboardPage() {
   const subscriptions = Array.isArray(subsData?.subscriptions) ? subsData.subscriptions : []
   const isLoading = roomsLoading || eventsLoading
 
-  // Filter bookings created today
+  // Filter bookings with notifications sent today (based on notificationTime, not meeting date)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const todayBookings = bookingEvents.filter((b) => {
-    const createdDate = new Date(b.createdAt)
-    return createdDate >= today
+    // Use notificationTime if available (when the notification was actually sent)
+    // Otherwise fall back to createdAt for pending bookings
+    const activityTime = b.notificationTime || b.createdAt
+    if (!activityTime) return false
+    const activityDate = new Date(activityTime)
+    return activityDate >= today
   })
 
   // Calculate processing time only for bookings with actual notification times
@@ -103,11 +109,21 @@ export default function DashboardPage() {
 
   // Handle delete booking from queue
   const handleDeleteBooking = async (bookingId: string) => {
+    // Find the booking to get details for audit log
+    const booking = bookingEvents.find(b => b.id === bookingId)
+
     try {
       const response = await fetch("/api/events", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId }),
+        body: JSON.stringify({
+          bookingId,
+          subject: booking?.subject,
+          organizer: booking?.organizer,
+          roomName: booking?.roomName,
+          actorId: user?.id,
+          actorEmail: user?.email,
+        }),
       })
       if (response.ok) {
         await mutateEvents()
@@ -121,11 +137,22 @@ export default function DashboardPage() {
 
   // Handle end booking with error
   const handleEndWithError = async (bookingId: string) => {
+    // Find the booking to get details for audit log
+    const booking = bookingEvents.find(b => b.id === bookingId)
+
     try {
       const response = await fetch("/api/events", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, action: "end-with-error" }),
+        body: JSON.stringify({
+          bookingId,
+          action: "end-with-error",
+          subject: booking?.subject,
+          organizer: booking?.organizer,
+          roomName: booking?.roomName,
+          actorId: user?.id,
+          actorEmail: user?.email,
+        }),
       })
       if (response.ok) {
         await mutateEvents()

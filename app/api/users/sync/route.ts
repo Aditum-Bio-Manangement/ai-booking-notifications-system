@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getUsers, getUserPhoto } from "@/lib/microsoft-graph"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { db } from "@/lib/db"
+import { createAuditLog } from "@/lib/audit"
 
 export interface SyncedUser {
   id: string
@@ -92,37 +92,19 @@ export async function POST(request: Request) {
 
     // Sync each user - create auth user if needed, then create/update profile
     for (const user of usersWithPhotos) {
-      // Check if user already exists in profiles
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", user.email)
-        .single()
+      let authUserId: string | null = null
 
-      if (existingProfile) {
-        // Update existing profile with M365 data
-        const { error: updateError } = await supabase
-          .from("profiles")
-          .update({
-            name: user.name,
-            department: user.department,
-            title: user.title,
-            phone: user.phone,
-            avatar_url: user.avatarUrl,
-            microsoft_id: user.microsoftId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingProfile.id)
+      // First, check if auth user already exists by listing users with this email
+      const { data: existingAuthUsers } = await supabase.auth.admin.listUsers()
+      const existingAuthUser = existingAuthUsers?.users?.find(u => u.email === user.email)
 
-        if (updateError) {
-          console.error(`[SYNC] Failed to update profile for ${user.email}:`, updateError)
-        }
+      if (existingAuthUser) {
+        authUserId = existingAuthUser.id
       } else {
-        // User doesn't exist - create auth user first, then profile
-        // Create user in Supabase Auth using admin API
+        // Create new auth user
         const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
           email: user.email,
-          email_confirm: true, // Auto-confirm since they're from M365
+          email_confirm: true,
           user_metadata: {
             name: user.name,
             microsoft_id: user.microsoftId,
@@ -134,39 +116,46 @@ export async function POST(request: Request) {
           console.error(`[SYNC] Failed to create auth user for ${user.email}:`, authError)
           continue
         }
+        authUserId = authUser?.user?.id || null
+      }
 
-        if (authUser?.user) {
-          // Now create the profile with the auth user's ID
-          const { error: profileError } = await supabase
-            .from("profiles")
-            .insert({
-              id: authUser.user.id, // Use the auth user's ID
-              email: user.email,
-              name: user.name,
-              role: "viewer", // Default role for synced users
-              department: user.department,
-              title: user.title,
-              phone: user.phone,
-              avatar_url: user.avatarUrl,
-              microsoft_id: user.microsoftId,
-              status: "active",
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
+      if (!authUserId) {
+        console.error(`[SYNC] No auth user ID for ${user.email}`)
+        continue
+      }
 
-          if (profileError) {
-            console.error(`[SYNC] Failed to create profile for ${user.email}:`, profileError)
-          }
-        }
+      // Upsert profile with M365 data
+      const { error: upsertError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: authUserId,
+          email: user.email,
+          name: user.name,
+          role: "viewer",
+          department: user.department,
+          title: user.title,
+          phone: user.phone,
+          avatar_url: user.avatarUrl,
+          microsoft_id: user.microsoftId,
+          status: "active",
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: "id",
+          ignoreDuplicates: false,
+        })
+
+      if (upsertError) {
+        console.error(`[SYNC] Failed to upsert profile for ${user.email}:`, upsertError)
       }
     }
 
     // Log to audit log with actor info
-    await db.auditLog.create({
-      user_id: actorId || null,
-      user_email: actorEmail || null,
+    await createAuditLog({
       action: "users.synced",
-      resource_type: "users",
+      actorId: actorId || undefined,
+      actorEmail: actorEmail || undefined,
+      resourceType: "users",
+      resourceId: undefined,
       details: {
         syncedCount: usersWithPhotos.length,
         userEmails: usersWithPhotos.map(u => u.email),

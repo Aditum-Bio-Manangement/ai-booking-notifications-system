@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sendEmail } from "@/lib/microsoft-graph"
 import { renderAcceptedEmail } from "@/lib/email-templates"
-import { db } from "@/lib/db"
+import { createAuditLog } from "@/lib/audit"
 
 // Test endpoint to verify email sending works
 // POST /api/test/send-notification
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      toEmail, 
+    const {
+      toEmail,
       roomName = "Test Room",
       subject = "Test Meeting",
-      organizerName = "Test User"
+      organizerName = "Test User",
+      isSeries = false,
+      recurrencePattern,
+      seriesStartDate,
+      seriesEndDate,
     } = body
 
     if (!toEmail) {
@@ -47,6 +51,11 @@ export async function POST(request: NextRequest) {
         { name: "Test Attendee 1", email: "attendee1@example.com" },
         { name: "Test Attendee 2", email: "attendee2@example.com" },
       ],
+      // Series data
+      isSeries,
+      recurrencePattern: recurrencePattern || (isSeries ? "Weekly on Monday, Wednesday, Friday" : undefined),
+      seriesStartDate: seriesStartDate || (isSeries ? "April 30, 2026" : undefined),
+      seriesEndDate: seriesEndDate || (isSeries ? "June 30, 2026" : undefined),
     })
 
     // Send the email via Microsoft Graph
@@ -60,10 +69,10 @@ export async function POST(request: NextRequest) {
     console.log(`[TEST] Email sent successfully!`)
 
     // Log to audit log
-    await db.auditLog.create({
+    await createAuditLog({
       action: "test.notification.sent",
-      resource_type: "email",
-      details: { 
+      resourceType: "email",
+      details: {
         toEmail,
         roomName,
         subject,
@@ -79,7 +88,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error(`[TEST] Failed to send email:`, error)
     return NextResponse.json(
-      { 
+      {
         error: "Failed to send test email",
         details: error instanceof Error ? error.message : String(error),
       },
@@ -90,25 +99,25 @@ export async function POST(request: NextRequest) {
 
 // GET endpoint to show instructions
 export async function GET() {
-    const notificationMailbox = process.env.NOTIFICATION_MAILBOX
+  const notificationMailbox = process.env.NOTIFICATION_MAILBOX
 
-    return NextResponse.json({
-        endpoint: "POST /api/test/send-notification",
-        description: "Test endpoint to verify email sending via Microsoft Graph",
-        configuration: {
-            notificationMailbox: notificationMailbox || "NOT CONFIGURED",
-            azureClientId: process.env.AZURE_CLIENT_ID ? "configured" : "NOT CONFIGURED",
-            azureClientSecret: process.env.AZURE_CLIENT_SECRET ? "configured" : "NOT CONFIGURED",
-            azureTenantId: process.env.AZURE_TENANT_ID ? "configured" : "NOT CONFIGURED",
-        },
-        exampleRequest: {
-            method: "POST",
-            body: {
-                toEmail: "caleb.klobe@aditumbio.com.com",
-                roomName: "Longfellow Room - Cambridge",
-                subject: "Test Meeting",
-                organizerName: "Caleb Klobe"
-            }
-        }
-    })
+  return NextResponse.json({
+    endpoint: "POST /api/test/send-notification",
+    description: "Test endpoint to verify email sending via Microsoft Graph",
+    configuration: {
+      notificationMailbox: notificationMailbox || "NOT CONFIGURED",
+      azureClientId: process.env.AZURE_CLIENT_ID ? "configured" : "NOT CONFIGURED",
+      azureClientSecret: process.env.AZURE_CLIENT_SECRET ? "configured" : "NOT CONFIGURED",
+      azureTenantId: process.env.AZURE_TENANT_ID ? "configured" : "NOT CONFIGURED",
+    },
+    exampleRequest: {
+      method: "POST",
+      body: {
+        toEmail: "caleb.klobe@aditumbio.com.com",
+        roomName: "Longfellow Room - Cambridge",
+        subject: "Test Meeting",
+        organizerName: "Caleb Klobe"
+      }
+    }
+  })
 }

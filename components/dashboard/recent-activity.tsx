@@ -23,12 +23,17 @@ export function RecentActivity({ bookings, isLoading = false }: RecentActivityPr
     return isNaN(time) ? 0 : time
   }
 
+  // Helper to get the most relevant activity time
+  const getActivityTime = (booking: BookingEvent): string => {
+    return booking.notificationTime || booking.createdAt
+  }
+
   // Sort by most recent activity - use notificationTime if available, otherwise createdAt
   const sortedBookings = [...bookings]
     .sort((a, b) => {
-      const timeA = safeGetTime(a.notificationTime) || safeGetTime(a.createdAt)
-      const timeB = safeGetTime(b.notificationTime) || safeGetTime(b.createdAt)
-      return timeB - timeA
+      const timeA = safeGetTime(getActivityTime(a))
+      const timeB = safeGetTime(getActivityTime(b))
+      return timeB - timeA // Most recent first (descending)
     })
     .slice(0, 6)
 
@@ -105,7 +110,7 @@ export function RecentActivity({ bookings, isLoading = false }: RecentActivityPr
                       {booking.subject}
                     </p>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {formatActivityTime(booking.createdAt)}
+                      {formatActivityTime(getActivityTime(booking))}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">

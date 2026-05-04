@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getRoomCalendarEvents, getRoomMailboxes } from "@/lib/microsoft-graph"
+import { createAuditLog, getAuditContext } from "@/lib/audit"
 
 // Store for manually managed bookings (deleted/errored)
 const managedBookings = new Map<string, { deleted?: boolean; error?: boolean; errorTime?: string }>()
@@ -128,6 +129,12 @@ export async function GET(request: NextRequest) {
         ? convertGraphDateTime(event.end.dateTime, event.end.timeZone)
         : new Date().toISOString()
 
+      // Use lastModifiedDateTime as notificationTime if the booking was processed
+      // This represents when the room auto-accepted/declined the booking
+      const notificationTime = outcome !== "pending" && event.lastModifiedDateTime
+        ? event.lastModifiedDateTime  // Already in ISO format with Z
+        : undefined
+
       return {
         id: event.id,
         roomId: event.id, // Use event ID as room ID for now
@@ -140,7 +147,7 @@ export async function GET(request: NextRequest) {
         endTime,
         outcome,
         notificationSent: outcome !== "pending", // Assume notification sent if processed
-        notificationTime: outcome !== "pending" ? event.lastModifiedDateTime : undefined,
+        notificationTime,
         declineReason: outcome.startsWith("declined") ? "Conflict with existing booking" : undefined,
         createdAt: event.createdDateTime || new Date().toISOString(),
       }
@@ -180,7 +187,9 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { bookingId } = await request.json()
+    const body = await request.json()
+    const { bookingId, subject, organizer, roomName } = body
+    const { actorId, actorEmail } = getAuditContext(body)
 
     if (!bookingId) {
       return NextResponse.json(
@@ -191,6 +200,17 @@ export async function DELETE(request: NextRequest) {
 
     // Mark the booking as deleted
     managedBookings.set(bookingId, { deleted: true })
+
+    // Log to audit log with actor info
+    await createAuditLog({
+      action: "queue.item_deleted",
+      actorId,
+      actorEmail,
+      resourceType: "booking",
+      resourceId: bookingId,
+      resourceName: subject || organizer || "Unknown booking",
+      details: { subject, organizer, roomName },
+    })
 
     return NextResponse.json({ success: true, message: "Booking removed from queue" })
   } catch (error) {
@@ -204,7 +224,9 @@ export async function DELETE(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { bookingId, action } = await request.json()
+    const body = await request.json()
+    const { bookingId, action, subject, organizer, roomName } = body
+    const { actorId, actorEmail } = getAuditContext(body)
 
     if (!bookingId) {
       return NextResponse.json(
@@ -216,6 +238,18 @@ export async function PATCH(request: NextRequest) {
     if (action === "end-with-error") {
       // Mark the booking as ended with error
       managedBookings.set(bookingId, { error: true, errorTime: new Date().toISOString() })
+
+      // Log to audit log with actor info
+      await createAuditLog({
+        action: "booking.marked_failed",
+        actorId,
+        actorEmail,
+        resourceType: "booking",
+        resourceId: bookingId,
+        resourceName: subject || organizer || "Unknown booking",
+        details: { errorTime: new Date().toISOString(), subject, organizer, roomName },
+      })
+
       return NextResponse.json({ success: true, message: "Booking marked as failed" })
     }
 

@@ -44,6 +44,7 @@ import {
 import { defaultTemplates } from "@/lib/email-templates"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
 import { format } from "date-fns"
+import { useAuth } from "@/lib/auth-context"
 
 interface TemplateVersion {
   id: string
@@ -90,6 +91,7 @@ function renderTemplate(template: string, data: Record<string, string>): string 
 }
 
 export function EmailTemplateEditor() {
+  const { user } = useAuth()
   const [activeTemplate, setActiveTemplate] = useState<"accepted" | "declined">("accepted")
   const [viewMode, setViewMode] = useState<"preview" | "code">("preview")
   const [isSaving, setIsSaving] = useState(false)
@@ -203,6 +205,8 @@ export function EmailTemplateEditor() {
           type: activeTemplate,
           subject: currentSubject,
           htmlBody: currentBody,
+          actorId: user?.id,
+          actorEmail: user?.email,
         }),
       })
 
@@ -423,6 +427,8 @@ export function EmailTemplateEditor() {
                           subject: renderTemplate(currentSubject, sampleData),
                           html: renderTemplate(currentBody, sampleData),
                           variables: sampleData,
+                          actorId: user?.id,
+                          actorEmail: user?.email,
                         }),
                       })
                       const data = await res.json()

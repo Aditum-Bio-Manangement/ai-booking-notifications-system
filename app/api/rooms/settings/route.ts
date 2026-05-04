@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server"
 import { getAccessToken, getRoomMailboxes } from "@/lib/microsoft-graph"
-import { db } from "@/lib/db"
+import { createAuditLog, getAuditContext } from "@/lib/audit"
 
 // PATCH - Update room mailbox settings to suppress/enable default notifications
 // This controls the automatic calendar processing responses that Exchange sends
 export async function PATCH(request: Request) {
     try {
-        const { suppressDefaultNotifications } = await request.json()
+        const body = await request.json()
+        const { suppressDefaultNotifications } = body
+        const { actorId, actorEmail } = getAuditContext(body)
 
         // Get access token
         const accessToken = await getAccessToken()
@@ -95,10 +97,12 @@ export async function PATCH(request: Request) {
         const successCount = results.filter(r => r.success).length
         const failCount = results.filter(r => !r.success).length
 
-        // Log to audit log
-        await db.auditLog.create({
+        // Log to audit log with actor info
+        await createAuditLog({
             action: suppressDefaultNotifications ? "rooms.notifications.suppressed" : "rooms.notifications.enabled",
-            resource_type: "room_settings",
+            actorId,
+            actorEmail,
+            resourceType: "room_settings",
             details: {
                 suppressDefaultNotifications,
                 successCount,

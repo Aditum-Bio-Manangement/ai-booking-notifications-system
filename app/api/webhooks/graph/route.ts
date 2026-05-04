@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getRoomEvent, sendEmail, getUserTimezone } from "@/lib/microsoft-graph"
-import { renderAcceptedEmail, renderDeclinedEmail } from "@/lib/email-templates"
+import { getRoomEvent, sendEmail, getUserTimezone, formatRecurrencePattern, formatSeriesDateRange, getSeriesConflicts } from "@/lib/microsoft-graph"
+import { renderAcceptedEmail, renderDeclinedEmail, renderSeriesConflictEmail } from "@/lib/email-templates"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // Store processed notifications to ensure idempotency (prevents duplicate webhook processing)
@@ -37,6 +37,77 @@ interface GraphNotification {
   }
   clientState?: string
   tenantId: string
+}
+
+// Helper to extract series data from an event
+function getSeriesData(event: { type?: string; recurrence?: Parameters<typeof formatRecurrencePattern>[0] }) {
+  const isSeries = event.type === "seriesMaster" || event.type === "occurrence" || event.type === "exception" || !!event.recurrence
+
+  console.log(`[WEBHOOK] getSeriesData: type=${event.type}, hasRecurrence=${!!event.recurrence}, isSeries=${isSeries}`)
+
+  if (!isSeries || !event.recurrence) {
+    return { isSeries: false }
+  }
+
+  const recurrencePattern = formatRecurrencePattern(event.recurrence)
+  const { startDate, endDate } = formatSeriesDateRange(event.recurrence)
+
+  console.log(`[WEBHOOK] Series detected: pattern="${recurrencePattern}", range="${startDate} - ${endDate}"`)
+
+  return {
+    isSeries: true,
+    recurrencePattern,
+    seriesStartDate: startDate,
+    seriesEndDate: endDate,
+  }
+}
+
+// Helper to get series data, fetching series master if needed for occurrences
+async function getSeriesDataAsync(
+  event: { type?: string; recurrence?: Parameters<typeof formatRecurrencePattern>[0]; seriesMasterId?: string },
+  roomEmail: string
+): Promise<{ isSeries: boolean; recurrencePattern?: string; seriesStartDate?: string; seriesEndDate?: string }> {
+  const isSeries = event.type === "seriesMaster" || event.type === "occurrence" || event.type === "exception" || !!event.recurrence
+
+  console.log(`[WEBHOOK] getSeriesDataAsync: type=${event.type}, hasRecurrence=${!!event.recurrence}, seriesMasterId=${event.seriesMasterId}, isSeries=${isSeries}`)
+
+  // If this is an occurrence or exception without recurrence data, fetch the series master
+  if (isSeries && !event.recurrence && event.seriesMasterId) {
+    console.log(`[WEBHOOK] Fetching series master ${event.seriesMasterId} for recurrence data`)
+    try {
+      const seriesMaster = await getRoomEvent(roomEmail, event.seriesMasterId)
+      if (seriesMaster.recurrence) {
+        const recurrencePattern = formatRecurrencePattern(seriesMaster.recurrence)
+        const { startDate, endDate } = formatSeriesDateRange(seriesMaster.recurrence)
+        console.log(`[WEBHOOK] Series master recurrence: pattern="${recurrencePattern}", range="${startDate} - ${endDate}"`)
+        return {
+          isSeries: true,
+          recurrencePattern,
+          seriesStartDate: startDate,
+          seriesEndDate: endDate,
+        }
+      }
+    } catch (error) {
+      console.error(`[WEBHOOK] Failed to fetch series master:`, error)
+    }
+  }
+
+  // Use local recurrence data if available
+  if (!isSeries || !event.recurrence) {
+    return { isSeries }
+  }
+
+  const recurrencePattern = formatRecurrencePattern(event.recurrence)
+  const { startDate, endDate } = formatSeriesDateRange(event.recurrence)
+
+  console.log(`[WEBHOOK] Series detected from event: pattern="${recurrencePattern}", range="${startDate} - ${endDate}"`)
+
+  return {
+    isSeries: true,
+    recurrencePattern,
+    seriesStartDate: startDate,
+    seriesEndDate: endDate,
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -208,6 +279,10 @@ async function processNotification(notification: GraphNotification) {
     responseStatus: event.responseStatus,
     organizer: event.organizer?.emailAddress?.address,
     location: event.location?.displayName,
+    type: event.type,
+    seriesMasterId: event.seriesMasterId,
+    hasRecurrence: !!event.recurrence,
+    recurrencePattern: event.recurrence?.pattern?.type,
   }))
 
   // Get the room email from the event attendees or location if we only have a GUID
@@ -281,6 +356,7 @@ async function processNotification(notification: GraphNotification) {
 
       console.log(`[WEBHOOK] Event now ACCEPTED after retry - sending notification`)
       const retryAcceptTimezone = await getUserTimezone(organizerEmail)
+      const seriesData = await getSeriesDataAsync(updatedEvent, userIdOrEmail)
       const htmlContent = renderAcceptedEmail({
         organizerName: updatedEvent.organizer.emailAddress.name,
         organizerEmail,
@@ -293,6 +369,7 @@ async function processNotification(notification: GraphNotification) {
           name: a.emailAddress.name,
           email: a.emailAddress.address,
         })),
+        ...seriesData,
       })
 
       try {
@@ -323,6 +400,7 @@ async function processNotification(notification: GraphNotification) {
 
       console.log(`[WEBHOOK] Event DECLINED after retry - sending notification`)
       const retryDeclineTimezone = await getUserTimezone(organizerEmail)
+      const retryDeclineSeriesData = await getSeriesDataAsync(updatedEvent, userIdOrEmail)
       const htmlContent = renderDeclinedEmail({
         organizerName: updatedEvent.organizer.emailAddress.name,
         organizerEmail,
@@ -336,6 +414,7 @@ async function processNotification(notification: GraphNotification) {
           name: a.emailAddress.name,
           email: a.emailAddress.address,
         })),
+        ...retryDeclineSeriesData,
       })
 
       try {
@@ -378,6 +457,7 @@ async function processNotification(notification: GraphNotification) {
     console.log(`[WEBHOOK] Organizer timezone from mailbox settings: "${organizerTimezone}"`)
 
     // Send acceptance notification using organizer's timezone
+    const acceptSeriesData = await getSeriesDataAsync(event, roomEmail)
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
       organizerEmail,
@@ -390,6 +470,7 @@ async function processNotification(notification: GraphNotification) {
         name: a.emailAddress.name,
         email: a.emailAddress.address,
       })),
+      ...acceptSeriesData,
     })
 
     try {
@@ -402,6 +483,90 @@ async function processNotification(notification: GraphNotification) {
       )
       emailsSentForEvents.set(eventId, Date.now())
       console.log(`[WEBHOOK] SUCCESS: Sent acceptance email for event ${eventId} to ${organizerEmail}`)
+
+      // For series events, check if any occurrences were declined due to conflicts
+      // Only check for seriesMaster events to avoid sending multiple conflict emails
+      if (acceptSeriesData.isSeries && event.type === "seriesMaster") {
+        console.log(`[WEBHOOK] This is a series master - checking for declined occurrences...`)
+
+        // Calculate date range for checking conflicts based on series range or default 6 months
+        const startDateTime = new Date().toISOString()
+        const endDate = acceptSeriesData.seriesEndDate
+          ? new Date(acceptSeriesData.seriesEndDate)
+          : new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000) // 6 months default
+        const endDateTime = endDate.toISOString()
+
+        console.log(`[WEBHOOK] Checking series conflicts from ${startDateTime} to ${endDateTime}`)
+
+        try {
+          const conflicts = await getSeriesConflicts(
+            roomEmail,
+            event.id, // seriesMasterId is the event itself for seriesMaster
+            startDateTime,
+            endDateTime
+          )
+
+          if (conflicts.length > 0) {
+            console.log(`[WEBHOOK] Found ${conflicts.length} declined occurrences in series`)
+
+            // Format conflict dates for the email
+            const conflictDates = conflicts.map(conflict => {
+              const conflictStart = new Date(conflict.start.dateTime + "Z")
+              const conflictEnd = new Date(conflict.end.dateTime + "Z")
+              const ianaTimezone = organizerTimezone.includes("Eastern") ? "America/New_York" :
+                organizerTimezone.includes("Pacific") ? "America/Los_Angeles" :
+                  organizerTimezone.includes("Central") ? "America/Chicago" : "America/New_York"
+
+              return {
+                date: conflictStart.toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                  timeZone: ianaTimezone
+                }),
+                startTime: conflictStart.toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  hour12: true,
+                  timeZone: ianaTimezone
+                }),
+                endTime: conflictEnd.toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  hour12: true,
+                  timeZone: ianaTimezone
+                }),
+              }
+            })
+
+            // Send series conflict email
+            const conflictEmailHtml = renderSeriesConflictEmail({
+              organizerName: event.organizer.emailAddress.name,
+              organizerEmail,
+              roomName,
+              subject: event.subject,
+              startTime: event.start.dateTime,
+              endTime: event.end.dateTime,
+              timeZone: organizerTimezone,
+              ...acceptSeriesData,
+              conflictDates,
+            })
+
+            await sendEmail(
+              notificationMailbox,
+              organizerEmail,
+              `Series Conflict: ${roomName} - ${event.subject} (${conflicts.length} date(s) unavailable)`,
+              conflictEmailHtml
+            )
+            console.log(`[WEBHOOK] SUCCESS: Sent series conflict email with ${conflicts.length} conflict dates`)
+          } else {
+            console.log(`[WEBHOOK] No declined occurrences found in series`)
+          }
+        } catch (conflictError) {
+          console.error(`[WEBHOOK] Failed to check series conflicts:`, conflictError)
+        }
+      }
     } catch (emailError) {
       console.error(`[WEBHOOK] FAILED to send acceptance email:`, emailError)
       console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
@@ -425,6 +590,7 @@ async function processNotification(notification: GraphNotification) {
     console.log(`[WEBHOOK] Organizer timezone: "${organizerTimezoneDecline}"`)
 
     // Send decline notification using organizer's timezone
+    const declineSeriesData = await getSeriesDataAsync(event, roomEmail)
     const htmlContent = renderDeclinedEmail({
       organizerName: event.organizer.emailAddress.name,
       organizerEmail,
@@ -438,6 +604,7 @@ async function processNotification(notification: GraphNotification) {
         name: a.emailAddress.name,
         email: a.emailAddress.address,
       })),
+      ...declineSeriesData,
     })
 
     try {
@@ -468,6 +635,7 @@ async function processNotification(notification: GraphNotification) {
       return
     }
     const tentativeTimezone = await getUserTimezone(organizerEmail)
+    const tentativeSeriesData = await getSeriesDataAsync(event, roomEmail)
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
       organizerEmail,
@@ -480,6 +648,7 @@ async function processNotification(notification: GraphNotification) {
         name: a.emailAddress.name,
         email: a.emailAddress.address,
       })),
+      ...tentativeSeriesData,
     })
 
     try {

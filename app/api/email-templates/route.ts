@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { setCustomTemplate } from "@/lib/email-templates"
-import { db } from "@/lib/db"
+import { createAuditLog, getAuditContext } from "@/lib/audit"
 
 // GET - Fetch email template by type
 export async function GET(request: NextRequest) {
@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
         const { type, subject, htmlBody } = body
+        const { actorId, actorEmail } = getAuditContext(body)
 
         if (!type || !["accepted", "declined"].includes(type)) {
             return NextResponse.json(
@@ -158,11 +159,13 @@ export async function POST(request: NextRequest) {
         }
         setCustomTemplate(type as "accepted" | "declined", templateData)
 
-        // Log to audit log
-        await db.auditLog.create({
+        // Log to audit log with actor info
+        await createAuditLog({
             action: "email.template.updated",
-            resource_type: "email_template",
-            resource_id: data.id,
+            actorId,
+            actorEmail,
+            resourceType: "email_template",
+            resourceId: data.id,
             details: { templateType: type, version: data.version },
         })
 
@@ -226,9 +229,9 @@ export async function DELETE(request: NextRequest) {
         }
 
         // Log to audit log
-        await db.auditLog.create({
+        await createAuditLog({
             action: "email.template.reset",
-            resource_type: "email_template",
+            resourceType: "email_template",
             details: { templateType: type },
         })
 

@@ -51,35 +51,40 @@ export function ActivityChart({ onRefresh, bookings = [], isLoading = false }: A
   const chartData = useMemo(() => {
     const selectedDateObj = getDateFromSelection()
     const tz = timezone || "America/New_York"
-    
+
     // Initialize hourly buckets (6 AM to 11 PM)
     const hourlyData: Record<number, { accepted: number; declined: number }> = {}
     for (let hour = 6; hour <= 23; hour++) {
       hourlyData[hour] = { accepted: 0, declined: 0 }
     }
-    
-    // Count bookings by hour for the selected date (based on when booking was created)
+
+    // Count bookings by hour for the selected date
+    // Use the same logic as the metrics: notificationTime if available, else createdAt
     bookings.forEach((booking) => {
       try {
-        // Use createdAt to show booking activity (when bookings were made)
-        const bookingCreatedDate = toZonedTime(parseISO(booking.createdAt), tz)
+        // Use notificationTime to show when notifications were sent
+        // Fall back to createdAt for pending bookings
+        const activityTime = booking.notificationTime || booking.createdAt
+        if (!activityTime) return
+
+        const activityDate = toZonedTime(parseISO(activityTime), tz)
         const compareDate = toZonedTime(selectedDateObj, tz)
-        
-        if (isSameDay(bookingCreatedDate, compareDate)) {
-          const hour = bookingCreatedDate.getHours()
-          if (hour >= 6 && hour <= 23) {
-            if (booking.outcome === "accepted") {
-              hourlyData[hour].accepted++
-            } else if (booking.outcome === "declined-conflict" || booking.outcome === "declined-policy") {
-              hourlyData[hour].declined++
-            }
+
+        if (isSameDay(activityDate, compareDate)) {
+          const hour = activityDate.getHours()
+          // Accept any hour (some notifications might come in early morning or late night)
+          const chartHour = Math.max(6, Math.min(23, hour))
+          if (booking.outcome === "accepted") {
+            hourlyData[chartHour].accepted++
+          } else if (booking.outcome === "declined-conflict" || booking.outcome === "declined-policy") {
+            hourlyData[chartHour].declined++
           }
         }
       } catch {
         // Skip invalid dates
       }
     })
-    
+
     // Convert to chart format
     return Object.entries(hourlyData).map(([hour, data]) => {
       const hourNum = parseInt(hour)
@@ -91,7 +96,7 @@ export function ActivityChart({ onRefresh, bookings = [], isLoading = false }: A
       }
     })
   }, [bookings, selectedDate, timezone])
-  
+
   const handleRefresh = async () => {
     if (isRefreshing) return
     setIsRefreshing(true)
@@ -157,9 +162,9 @@ export function ActivityChart({ onRefresh, bookings = [], isLoading = false }: A
                 <SelectItem value="3days">{formatInTimezone(subDays(new Date(), 3), "MMM d", timezone)}</SelectItem>
               </SelectContent>
             </Select>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={handleRefresh}
               disabled={isRefreshing}
               className="h-8 w-8"

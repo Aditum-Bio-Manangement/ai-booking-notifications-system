@@ -112,6 +112,7 @@ export const defaultTemplates = {
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
                         </td>
                       </tr>
+                      {{seriesSection}}
                       <tr>
                         <td style="padding-top: 16px;">
                           <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Organizer</p>
@@ -242,6 +243,7 @@ export const defaultTemplates = {
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
                         </td>
                       </tr>
+                      {{seriesSection}}
                       <tr>
                         <td style="padding-top: 16px;">
                           <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Organizer</p>
@@ -296,6 +298,13 @@ export interface EmailTemplateData {
   reason?: string
   logoUrl?: string
   attendees?: Array<{ name: string; email: string }>
+  // Series/Recurrence fields
+  isSeries?: boolean
+  recurrencePattern?: string // e.g., "Daily", "Weekly on Monday", "Monthly"
+  seriesStartDate?: string
+  seriesEndDate?: string
+  // Conflict fields for series with partial declines
+  conflictDates?: Array<{ date: string; startTime: string; endTime: string }>
 }
 
 // Map common Microsoft timezone IDs to IANA timezone names
@@ -412,6 +421,35 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
     }
   }
 
+  // Generate series section HTML if this is a recurring meeting
+  let seriesSection = ""
+  console.log(`[EMAIL] Series data: isSeries=${data.isSeries}, pattern="${data.recurrencePattern}", startDate="${data.seriesStartDate}", endDate="${data.seriesEndDate}"`)
+  if (data.isSeries && data.recurrencePattern) {
+    const seriesDateRange = data.seriesStartDate && data.seriesEndDate
+      ? `${data.seriesStartDate} - ${data.seriesEndDate}`
+      : data.seriesStartDate
+        ? `Starting ${data.seriesStartDate}`
+        : ""
+
+    seriesSection = `
+      <tr>
+        <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
+          <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+            <tr>
+              <td style="vertical-align: top;">
+                <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 8px;">SERIES</span>
+                  Recurring Meeting
+                </p>
+                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.recurrencePattern}</p>
+                ${seriesDateRange ? `<p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">${seriesDateRange}</p>` : ""}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`
+  }
+
   return template
     .replace(/\{\{organizerName\}\}/g, data.organizerName)
     .replace(/\{\{roomName\}\}/g, data.roomName)
@@ -423,6 +461,11 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
     .replace(/\{\{reason\}\}/g, data.reason || "")
     .replace(/\{\{logoUrl\}\}/g, logoUrl)
     .replace(/\{\{attendeesSection\}\}/g, attendeesSection)
+    .replace(/\{\{seriesSection\}\}/g, seriesSection)
+    .replace(/\{\{isSeries\}\}/g, data.isSeries ? "Yes" : "No")
+    .replace(/\{\{recurrencePattern\}\}/g, data.recurrencePattern || "")
+    .replace(/\{\{seriesStartDate\}\}/g, data.seriesStartDate || "")
+    .replace(/\{\{seriesEndDate\}\}/g, data.seriesEndDate || "")
 }
 
 export function renderAcceptedEmail(data: EmailTemplateData): string {
@@ -437,6 +480,143 @@ export function renderDeclinedEmail(data: EmailTemplateData): string {
   const customTemplate = customTemplatesCache.declined
   const template = customTemplate?.body || defaultTemplates.declined.body
   return replaceTemplateVariables(template, data)
+}
+
+// Render a series conflict notification email (when some occurrences are declined)
+export function renderSeriesConflictEmail(data: EmailTemplateData): string {
+  const logoUrl = data.logoUrl || process.env.LOGO_URL || "https://ai-booking-notifications-system.onrender.com/images/aditum-logo-horizontal.png"
+  const timezoneDisplay = getTimezoneDisplayName(data.timeZone)
+
+  // Format conflict dates as a list
+  let conflictListHtml = ""
+  if (data.conflictDates && data.conflictDates.length > 0) {
+    conflictListHtml = data.conflictDates.map(conflict => `
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #fecaca;">
+          <span style="color: #991b1b; font-weight: 500;">${conflict.date}</span>
+          <span style="color: #dc2626; margin-left: 8px;">${conflict.startTime} - ${conflict.endTime}</span>
+        </td>
+      </tr>
+    `).join("")
+  }
+
+  const seriesInfo = data.recurrencePattern
+    ? `<p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">Series: ${data.recurrencePattern}</p>`
+    : ""
+
+  const seriesDateRange = data.seriesStartDate && data.seriesEndDate
+    ? `<p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">Duration: ${data.seriesStartDate} - ${data.seriesEndDate}</p>`
+    : ""
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meeting Series - Some Dates Unavailable</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #f5f5f5;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #dc2626 0%, #f59e0b 100%); padding: 24px 32px;" bgcolor="#dc2626">
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                <tr>
+                  <td style="vertical-align: middle;" valign="middle" width="120">
+                    <img src="${logoUrl}" alt="Aditum Bio" style="height: 60px; display: block;" height="60">
+                  </td>
+                  <td style="vertical-align: middle; padding-left: 20px;" valign="middle">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600;">Series Conflict Notice</h1>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 32px;">
+              <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
+                Hi ${data.organizerName},
+              </p>
+              
+              <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
+                Your recurring meeting series has been partially booked. <strong>Most dates are confirmed</strong>, but the following dates have conflicts and could not be reserved:
+              </p>
+              
+              <!-- Conflict Dates -->
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #fef2f2; border-radius: 8px; border: 1px solid #fecaca; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 16px;">
+                    <p style="margin: 0 0 12px; color: #991b1b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                      Unavailable Dates
+                    </p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                      ${conflictListHtml}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Meeting Details Card -->
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <tr>
+                  <td style="padding: 24px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                      <tr>
+                        <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
+                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 8px;">SERIES</span>
+                            Meeting
+                          </p>
+                          <p style="margin: 4px 0 0; color: #425cc7; font-size: 18px; font-weight: 600;">${data.subject}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
+                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Room</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.roomName}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top: 16px;">
+                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Series Details</p>
+                          ${seriesInfo}
+                          ${seriesDateRange}
+                          <p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">Time: ${data.startTime} - ${data.endTime} (${timezoneDisplay})</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="margin: 24px 0 0; color: #64748b; font-size: 14px; line-height: 1.6;">
+                Please check the conflicting dates above and consider rebooking them for a different room or time through Outlook.
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 24px 32px; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #64748b; font-size: 12px; text-align: center;">
+                This is an automated message from the Aditum Bio Room Booking System.<br>
+                Please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
 }
 
 export function getEmailSubject(type: "accepted" | "declined", data: EmailTemplateData): string {

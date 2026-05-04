@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { db } from "@/lib/db"
+import { createAuditLog, getAuditContext } from "@/lib/audit"
 
 // GET - Fetch all settings from the settings table
 export async function GET() {
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
         const { settings } = body
+        const { actorId, actorEmail } = getAuditContext(body)
 
         if (!settings) {
             return NextResponse.json({ error: "Settings are required" }, { status: 400 })
@@ -70,11 +71,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Log to audit log
+        // Log to audit log with actor info
         if (updatedSections.length > 0) {
-            await db.auditLog.create({
+            await createAuditLog({
                 action: "settings.updated",
-                resource_type: "settings",
+                actorId,
+                actorEmail,
+                resourceType: "settings",
                 details: { sections: updatedSections },
             })
         }

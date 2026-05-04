@@ -38,6 +38,7 @@ import useSWR from "swr"
 import { UserManagement } from "./user-management"
 import { useTimezone } from "@/lib/timezone-context"
 import { MigrateSettingsButton } from "./migrate-settings-button"
+import { useAuth } from "@/lib/auth-context"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -262,6 +263,7 @@ function TimezoneSettings() {
 }
 
 export function SettingsPanel() {
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState("subscriptions")
   const [settings, setSettings] = useState<SystemSettings>(defaultSettings)
   const [isSaving, setIsSaving] = useState(false)
@@ -433,7 +435,11 @@ export function SettingsPanel() {
       const response = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings })
+        body: JSON.stringify({
+          settings,
+          actorId: user?.id,
+          actorEmail: user?.email,
+        })
       })
 
       if (!response.ok) {
@@ -457,11 +463,21 @@ export function SettingsPanel() {
     if (!newRoomEmail) return
     setIsCreating(true)
 
+    // Get room name from rooms data
+    const selectedRoom = roomsData?.rooms?.find((r) => r.roomUpn === newRoomEmail)
+    const roomName = selectedRoom?.displayName || newRoomEmail
+
     try {
       const response = await fetch("/api/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomEmail: newRoomEmail, durationHours: subscriptionDuration }),
+        body: JSON.stringify({
+          roomEmail: newRoomEmail,
+          roomName,
+          durationHours: subscriptionDuration,
+          actorId: user?.id,
+          actorEmail: user?.email,
+        }),
       })
       const data = await response.json()
 
@@ -496,12 +512,18 @@ export function SettingsPanel() {
     }
   }
 
-  const handleDeleteSubscription = async (subscriptionId: string) => {
+  const handleDeleteSubscription = async (subscriptionId: string, roomEmail?: string, roomName?: string) => {
     try {
       await fetch("/api/subscriptions", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionId }),
+        body: JSON.stringify({
+          subscriptionId,
+          roomEmail,
+          roomName,
+          actorId: user?.id,
+          actorEmail: user?.email,
+        }),
       })
       mutateSubscriptions()
     } catch (error) {
@@ -782,7 +804,7 @@ export function SettingsPanel() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteSubscription(sub.id)}
+                              onClick={() => handleDeleteSubscription(sub.id, sub.roomEmail, sub.roomEmail)}
                               className="text-destructive hover:text-destructive"
                               title="Delete subscription"
                             >

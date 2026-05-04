@@ -6,7 +6,7 @@ import {
   renewSubscription,
 } from "@/lib/microsoft-graph"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { db } from "@/lib/db"
+import { createAuditLog, getAuditContext } from "@/lib/audit"
 
 // In-memory storage for mock subscriptions (in production, use a database)
 let mockSubscriptions: Array<{
@@ -136,7 +136,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { roomEmail, notificationUrl, durationHours } = body
+    const { roomEmail, roomName, notificationUrl, durationHours } = body
+    const { actorId, actorEmail } = getAuditContext(body)
 
     if (!roomEmail) {
       return NextResponse.json(
@@ -205,12 +206,20 @@ export async function POST(request: NextRequest) {
         clientState,
       })
 
-      // Log to audit log
-      await db.auditLog.create({
-        action: "subscription.created",
-        resource_type: "subscription",
-        resource_id: subscription.id,
-        details: { roomEmail, expiresAt: subscription.expirationDateTime },
+      // Log to audit log with room name and actor info
+      await createAuditLog({
+        action: "room.subscribed",
+        actorId,
+        actorEmail,
+        resourceType: "room",
+        resourceId: roomEmail,
+        resourceName: roomName || roomEmail,
+        details: {
+          roomEmail,
+          roomName,
+          subscriptionId: subscription.id,
+          expiresAt: subscription.expirationDateTime,
+        },
       })
 
       return NextResponse.json({
@@ -290,7 +299,8 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const body = await request.json()
-    const { subscriptionId } = body
+    const { subscriptionId, roomEmail, roomName } = body
+    const { actorId, actorEmail } = getAuditContext(body)
 
     if (!subscriptionId) {
       return NextResponse.json(
@@ -319,11 +329,19 @@ export async function DELETE(request: NextRequest) {
     // Delete from Supabase database
     await deleteSubscriptionFromDb(subscriptionId)
 
-    // Log to audit log
-    await db.auditLog.create({
-      action: "subscription.deleted",
-      resource_type: "subscription",
-      resource_id: subscriptionId,
+    // Log to audit log with room name and actor info
+    await createAuditLog({
+      action: "room.unsubscribed",
+      actorId,
+      actorEmail,
+      resourceType: "room",
+      resourceId: roomEmail || subscriptionId,
+      resourceName: roomName || roomEmail || subscriptionId,
+      details: {
+        subscriptionId,
+        roomEmail,
+        roomName,
+      },
     })
 
     return NextResponse.json({ success: true })
