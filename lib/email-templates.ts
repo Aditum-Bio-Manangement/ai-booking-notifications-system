@@ -165,10 +165,10 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #19226d 0%, #425cc7 100%); padding: 24px 32px;" bgcolor="#19226d">
+            <td style="background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%); padding: 24px 32px;" bgcolor="#7f1d1d">
               <!--[if mso]>
               <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;">
-              <v:fill type="gradient" color="#425cc7" color2="#19226d" angle="135"/>
+              <v:fill type="gradient" color="#dc2626" color2="#7f1d1d" angle="135"/>
               <v:textbox inset="0,0,0,0">
               <![endif]-->
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
@@ -432,22 +432,23 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
         : ""
 
     seriesSection = `
-      <tr>
-        <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
-          <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
-            <tr>
-              <td style="vertical-align: top;">
-                <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-                  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 8px;">SERIES</span>
-                  Recurring Meeting
-                </p>
-                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.recurrencePattern}</p>
-                ${seriesDateRange ? `<p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">${seriesDateRange}</p>` : ""}
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>`
+  <tr>
+  <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
+  <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+  <tr>
+  <td style="vertical-align: top;">
+  <p style="margin: 0;">
+  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">RECURRING</span>
+  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 4px;">MEETING</span>
+  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 4px;">SERIES</span>
+  </p>
+  <p style="margin: 8px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.recurrencePattern}</p>
+  ${seriesDateRange ? `<p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">${seriesDateRange}</p>` : ""}
+  </td>
+  </tr>
+  </table>
+  </td>
+  </tr>`
   }
 
   return template
