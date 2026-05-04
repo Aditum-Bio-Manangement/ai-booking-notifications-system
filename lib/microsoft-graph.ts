@@ -326,7 +326,7 @@ export async function getSeriesConflicts(
   startDateTime: string,
   endDateTime: string
 ): Promise<CalendarEvent[]> {
-  console.log(`[GRAPH] Getting series conflicts for ${seriesMasterId} from ${startDateTime} to ${endDateTime}`)
+
 
   // Get instances of the series within the date range
   const params = new URLSearchParams({
@@ -340,19 +340,14 @@ export async function getSeriesConflicts(
       `/users/${roomEmail}/events/${seriesMasterId}/instances?${params}`
     )
 
-    console.log(`[GRAPH] Found ${response.value?.length || 0} series instances`)
 
-    // Log response statuses for debugging
-    response.value?.forEach(event => {
-      console.log(`[GRAPH] Instance ${event.start?.dateTime}: status=${event.responseStatus?.response}`)
-    })
 
     // Filter for declined occurrences
     const declined = response.value.filter(event =>
       event.responseStatus?.response === "declined"
     )
 
-    console.log(`[GRAPH] Found ${declined.length} declined occurrences`)
+
     return declined
   } catch (error) {
     console.error(`[GRAPH] Failed to get series conflicts:`, error)

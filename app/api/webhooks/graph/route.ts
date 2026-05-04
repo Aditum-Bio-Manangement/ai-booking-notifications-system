@@ -43,7 +43,7 @@ interface GraphNotification {
 function getSeriesData(event: { type?: string; recurrence?: Parameters<typeof formatRecurrencePattern>[0] }) {
   const isSeries = event.type === "seriesMaster" || event.type === "occurrence" || event.type === "exception" || !!event.recurrence
 
-  console.log(`[WEBHOOK] getSeriesData: type=${event.type}, hasRecurrence=${!!event.recurrence}, isSeries=${isSeries}`)
+
 
   if (!isSeries || !event.recurrence) {
     return { isSeries: false }
@@ -69,17 +69,17 @@ async function getSeriesDataAsync(
 ): Promise<{ isSeries: boolean; recurrencePattern?: string; seriesStartDate?: string; seriesEndDate?: string }> {
   const isSeries = event.type === "seriesMaster" || event.type === "occurrence" || event.type === "exception" || !!event.recurrence
 
-  console.log(`[WEBHOOK] getSeriesDataAsync: type=${event.type}, hasRecurrence=${!!event.recurrence}, seriesMasterId=${event.seriesMasterId}, isSeries=${isSeries}`)
+
 
   // If this is an occurrence or exception without recurrence data, fetch the series master
   if (isSeries && !event.recurrence && event.seriesMasterId) {
-    console.log(`[WEBHOOK] Fetching series master ${event.seriesMasterId} for recurrence data`)
+
     try {
       const seriesMaster = await getRoomEvent(roomEmail, event.seriesMasterId)
       if (seriesMaster.recurrence) {
         const recurrencePattern = formatRecurrencePattern(seriesMaster.recurrence)
         const { startDate, endDate } = formatSeriesDateRange(seriesMaster.recurrence)
-        console.log(`[WEBHOOK] Series master recurrence: pattern="${recurrencePattern}", range="${startDate} - ${endDate}"`)
+
         return {
           isSeries: true,
           recurrencePattern,
@@ -100,7 +100,7 @@ async function getSeriesDataAsync(
   const recurrencePattern = formatRecurrencePattern(event.recurrence)
   const { startDate, endDate } = formatSeriesDateRange(event.recurrence)
 
-  console.log(`[WEBHOOK] Series detected from event: pattern="${recurrencePattern}", range="${startDate} - ${endDate}"`)
+
 
   return {
     isSeries: true,
@@ -456,8 +456,81 @@ async function processNotification(notification: GraphNotification) {
     const organizerTimezone = await getUserTimezone(organizerEmail)
     console.log(`[WEBHOOK] Organizer timezone from mailbox settings: "${organizerTimezone}"`)
 
-    // Send acceptance notification using organizer's timezone
+    // Get series data and check for conflicts BEFORE sending accepted email
     const acceptSeriesData = await getSeriesDataAsync(event, roomEmail)
+
+    // For series events, check if any occurrences were declined due to conflicts
+    const seriesMasterId = event.type === "seriesMaster" ? event.id : event.seriesMasterId
+    let conflictDates: Array<{ date: string; startTime: string; endTime: string; organizerName: string }> = []
+    let conflictEvents: Array<{ start: { dateTime: string }; end: { dateTime: string }; id: string }> = []
+
+    if (acceptSeriesData.isSeries && seriesMasterId) {
+      console.log(`[WEBHOOK] This is a series (type=${event.type}, masterId=${seriesMasterId}) - checking for declined occurrences...`)
+
+      // Calculate date range for checking conflicts based on series range or default 6 months
+      const startDateTime = new Date().toISOString()
+      const endDate = acceptSeriesData.seriesEndDate
+        ? new Date(acceptSeriesData.seriesEndDate)
+        : new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000) // 6 months default
+      const endDateTime = endDate.toISOString()
+
+      console.log(`[WEBHOOK] Checking series conflicts from ${startDateTime} to ${endDateTime}`)
+
+      try {
+        const conflicts = await getSeriesConflicts(
+          roomEmail,
+          seriesMasterId,
+          startDateTime,
+          endDateTime
+        )
+
+        if (conflicts.length > 0) {
+          console.log(`[WEBHOOK] Found ${conflicts.length} declined occurrences in series`)
+          conflictEvents = conflicts
+
+          // Format conflict dates for the email (like Outlook does)
+          const ianaTimezone = organizerTimezone.includes("Eastern") ? "America/New_York" :
+            organizerTimezone.includes("Pacific") ? "America/Los_Angeles" :
+              organizerTimezone.includes("Central") ? "America/Chicago" : "America/New_York"
+
+          conflictDates = conflicts.map(conflict => {
+            const conflictStart = new Date(conflict.start.dateTime + "Z")
+            const conflictEnd = new Date(conflict.end.dateTime + "Z")
+
+            return {
+              date: conflictStart.toLocaleDateString("en-US", {
+                weekday: "short",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+                timeZone: ianaTimezone
+              }),
+              startTime: conflictStart.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true,
+                timeZone: ianaTimezone
+              }),
+              endTime: conflictEnd.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true,
+                timeZone: ianaTimezone
+              }),
+              organizerName: event.organizer.emailAddress.name,
+            }
+          })
+        } else {
+          console.log(`[WEBHOOK] No declined occurrences found in series`)
+        }
+      } catch (conflictError) {
+        console.error(`[WEBHOOK] Failed to check series conflicts:`, conflictError)
+      }
+    }
+
+    // Send acceptance notification with conflicts inline (like Outlook does)
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
       organizerEmail,
@@ -471,100 +544,79 @@ async function processNotification(notification: GraphNotification) {
         email: a.emailAddress.address,
       })),
       ...acceptSeriesData,
+      conflictDates: conflictDates.length > 0 ? conflictDates : undefined,
     })
 
     try {
       console.log(`[WEBHOOK] Calling sendEmail via Graph API...`)
+      const subjectWithConflicts = conflictDates.length > 0
+        ? `Room Confirmed (${conflictDates.length} conflict${conflictDates.length > 1 ? 's' : ''}): ${roomName} - ${event.subject}`
+        : `Room Confirmed: ${roomName} - ${event.subject}`
+
       await sendEmail(
         notificationMailbox,
         organizerEmail,
-        `Room Confirmed: ${roomName} - ${event.subject}`,
+        subjectWithConflicts,
         htmlContent
       )
       emailsSentForEvents.set(eventId, Date.now())
       console.log(`[WEBHOOK] SUCCESS: Sent acceptance email for event ${eventId} to ${organizerEmail}`)
 
-      // For series events, check if any occurrences were declined due to conflicts
-      // Only check for seriesMaster events to avoid sending multiple conflict emails
-      if (acceptSeriesData.isSeries && event.type === "seriesMaster") {
-        console.log(`[WEBHOOK] This is a series master - checking for declined occurrences...`)
+      // Send individual declined emails for each conflict (like Outlook does)
+      if (conflictEvents.length > 0) {
+        console.log(`[WEBHOOK] Sending ${conflictEvents.length} individual decline notifications for conflicts...`)
 
-        // Calculate date range for checking conflicts based on series range or default 6 months
-        const startDateTime = new Date().toISOString()
-        const endDate = acceptSeriesData.seriesEndDate
-          ? new Date(acceptSeriesData.seriesEndDate)
-          : new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000) // 6 months default
-        const endDateTime = endDate.toISOString()
+        const ianaTimezone = organizerTimezone.includes("Eastern") ? "America/New_York" :
+          organizerTimezone.includes("Pacific") ? "America/Los_Angeles" :
+            organizerTimezone.includes("Central") ? "America/Chicago" : "America/New_York"
 
-        console.log(`[WEBHOOK] Checking series conflicts from ${startDateTime} to ${endDateTime}`)
+        for (const conflict of conflictEvents) {
+          try {
+            const conflictStart = new Date(conflict.start.dateTime + "Z")
+            const conflictEnd = new Date(conflict.end.dateTime + "Z")
 
-        try {
-          const conflicts = await getSeriesConflicts(
-            roomEmail,
-            event.id, // seriesMasterId is the event itself for seriesMaster
-            startDateTime,
-            endDateTime
-          )
-
-          if (conflicts.length > 0) {
-            console.log(`[WEBHOOK] Found ${conflicts.length} declined occurrences in series`)
-
-            // Format conflict dates for the email
-            const conflictDates = conflicts.map(conflict => {
-              const conflictStart = new Date(conflict.start.dateTime + "Z")
-              const conflictEnd = new Date(conflict.end.dateTime + "Z")
-              const ianaTimezone = organizerTimezone.includes("Eastern") ? "America/New_York" :
-                organizerTimezone.includes("Pacific") ? "America/Los_Angeles" :
-                  organizerTimezone.includes("Central") ? "America/Chicago" : "America/New_York"
-
-              return {
-                date: conflictStart.toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                  timeZone: ianaTimezone
-                }),
-                startTime: conflictStart.toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                  hour12: true,
-                  timeZone: ianaTimezone
-                }),
-                endTime: conflictEnd.toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                  hour12: true,
-                  timeZone: ianaTimezone
-                }),
-              }
+            const conflictDate = conflictStart.toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "numeric",
+              day: "numeric",
+              year: "numeric",
+              timeZone: ianaTimezone
+            })
+            const conflictStartTime = conflictStart.toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+              timeZone: ianaTimezone
+            })
+            const conflictEndTime = conflictEnd.toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+              timeZone: ianaTimezone
             })
 
-            // Send series conflict email
-            const conflictEmailHtml = renderSeriesConflictEmail({
+            const declineHtml = renderDeclinedEmail({
               organizerName: event.organizer.emailAddress.name,
               organizerEmail,
               roomName,
               subject: event.subject,
-              startTime: event.start.dateTime,
-              endTime: event.end.dateTime,
+              startTime: conflict.start.dateTime,
+              endTime: conflict.end.dateTime,
               timeZone: organizerTimezone,
+              reason: `This instance was declined because there are conflicts. The room is already booked for ${conflictDate} ${conflictStartTime} - ${conflictEndTime}.`,
               ...acceptSeriesData,
-              conflictDates,
             })
 
             await sendEmail(
               notificationMailbox,
               organizerEmail,
-              `Series Conflict: ${roomName} - ${event.subject} (${conflicts.length} date(s) unavailable)`,
-              conflictEmailHtml
+              `Declined: ${roomName} - ${event.subject} (${conflictDate} ${conflictStartTime} - ${conflictEndTime})`,
+              declineHtml
             )
-            console.log(`[WEBHOOK] SUCCESS: Sent series conflict email with ${conflicts.length} conflict dates`)
-          } else {
-            console.log(`[WEBHOOK] No declined occurrences found in series`)
+            console.log(`[WEBHOOK] SUCCESS: Sent decline email for conflict on ${conflictDate}`)
+          } catch (conflictEmailError) {
+            console.error(`[WEBHOOK] Failed to send decline email for conflict:`, conflictEmailError)
           }
-        } catch (conflictError) {
-          console.error(`[WEBHOOK] Failed to check series conflicts:`, conflictError)
         }
       }
     } catch (emailError) {

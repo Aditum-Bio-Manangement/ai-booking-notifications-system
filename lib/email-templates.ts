@@ -125,6 +125,8 @@ export const defaultTemplates = {
                 </tr>
               </table>
               
+              {{conflictsSection}}
+              
               <p style="margin: 24px 0 0; color: #64748b; font-size: 14px; line-height: 1.6;">
                 Please arrive a few minutes early to set up any required equipment. If you need to cancel or modify this booking, please do so through Outlook.
               </p>
@@ -303,8 +305,8 @@ export interface EmailTemplateData {
   recurrencePattern?: string // e.g., "Daily", "Weekly on Monday", "Monthly"
   seriesStartDate?: string
   seriesEndDate?: string
-  // Conflict fields for series with partial declines
-  conflictDates?: Array<{ date: string; startTime: string; endTime: string }>
+  // Conflict fields for series with partial declines - shown inline in accepted email
+  conflictDates?: Array<{ date: string; startTime: string; endTime: string; organizerName?: string }>
 }
 
 // Map common Microsoft timezone IDs to IANA timezone names
@@ -329,7 +331,7 @@ function formatDateTime(isoString: string, timeZone: string) {
   // Convert Microsoft timezone ID to IANA if needed
   const ianaTimezone = timezoneMap[timeZone] || timeZone || "America/New_York"
 
-  console.log(`[EMAIL] formatDateTime called with: isoString=${isoString}, timeZone=${timeZone}, ianaTimezone=${ianaTimezone}`)
+
 
   try {
     // Parse the datetime - Microsoft Graph sends UTC times with Z suffix
@@ -362,7 +364,7 @@ function formatDateTime(isoString: string, timeZone: string) {
     const formattedDate = date.toLocaleDateString("en-US", dateOptions)
     const formattedTime = date.toLocaleTimeString("en-US", timeOptions)
 
-    console.log(`[EMAIL] Formatted result: date=${formattedDate}, time=${formattedTime}`)
+
 
     return {
       date: formattedDate,
@@ -421,9 +423,41 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
     }
   }
 
+  // Generate conflicts section HTML if there are conflicts in the series (like Outlook does)
+  let conflictsSection = ""
+  if (data.conflictDates && data.conflictDates.length > 0) {
+    const conflictListHtml = data.conflictDates.map(conflict => `
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #fecaca;">
+          <span style="color: #991b1b; font-weight: 500;">${conflict.organizerName || data.organizerName}</span>
+          <span style="color: #64748b;"> - </span>
+          <span style="color: #dc2626;">${conflict.date} ${conflict.startTime} to ${conflict.date} ${conflict.endTime}</span>
+        </td>
+      </tr>
+    `).join("")
+
+    conflictsSection = `
+    <!-- Conflicts Warning (like Outlook) -->
+    <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #fef3c7; border-radius: 8px; border: 1px solid #fcd34d; margin-top: 24px;">
+      <tr>
+        <td style="padding: 16px 24px;">
+          <p style="margin: 0 0 8px; color: #92400e; font-size: 14px; font-weight: 600;">
+            However, the following instances conflict:
+          </p>
+          <p style="margin: 0 0 8px; color: #78350f; font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">
+            Organizer and Time of Conflicting Meeting
+          </p>
+          <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+            ${conflictListHtml}
+          </table>
+        </td>
+      </tr>
+    </table>`
+  }
+
   // Generate series section HTML if this is a recurring meeting
   let seriesSection = ""
-  console.log(`[EMAIL] Series data: isSeries=${data.isSeries}, pattern="${data.recurrencePattern}", startDate="${data.seriesStartDate}", endDate="${data.seriesEndDate}"`)
+
   if (data.isSeries && data.recurrencePattern) {
     const seriesDateRange = data.seriesStartDate && data.seriesEndDate
       ? `${data.seriesStartDate} - ${data.seriesEndDate}`
@@ -463,6 +497,7 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
     .replace(/\{\{logoUrl\}\}/g, logoUrl)
     .replace(/\{\{attendeesSection\}\}/g, attendeesSection)
     .replace(/\{\{seriesSection\}\}/g, seriesSection)
+    .replace(/\{\{conflictsSection\}\}/g, conflictsSection)
     .replace(/\{\{isSeries\}\}/g, data.isSeries ? "Yes" : "No")
     .replace(/\{\{recurrencePattern\}\}/g, data.recurrencePattern || "")
     .replace(/\{\{seriesStartDate\}\}/g, data.seriesStartDate || "")
