@@ -460,9 +460,12 @@ async function processNotification(notification: GraphNotification) {
     const acceptSeriesData = await getSeriesDataAsync(event, roomEmail)
 
     // For series events, check if any occurrences were declined due to conflicts
-    const seriesMasterId = event.type === "seriesMaster" ? event.id : event.seriesMasterId
+    // seriesMasterId is: the event.id if this IS a series master (has recurrence), otherwise event.seriesMasterId
+    const seriesMasterId = event.recurrence ? event.id : (event.type === "seriesMaster" ? event.id : event.seriesMasterId)
     let conflictDates: Array<{ date: string; startTime: string; endTime: string; organizerName: string }> = []
     let conflictEvents: Array<{ start: { dateTime: string }; end: { dateTime: string }; id: string }> = []
+
+    console.log(`[WEBHOOK] Series check: isSeries=${acceptSeriesData.isSeries}, eventType=${event.type}, hasRecurrence=${!!event.recurrence}, seriesMasterId=${seriesMasterId}`)
 
     if (acceptSeriesData.isSeries && seriesMasterId) {
       console.log(`[WEBHOOK] This is a series (type=${event.type}, masterId=${seriesMasterId}) - checking for declined occurrences...`)

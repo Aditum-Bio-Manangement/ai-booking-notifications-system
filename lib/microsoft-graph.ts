@@ -363,7 +363,7 @@ export async function getSeriesConflicts(
       const calendarParams = new URLSearchParams({
         startDateTime,
         endDateTime,
-        $select: "id,subject,start,end,seriesMasterId,isCancelled",
+        $select: "id,subject,start,end,seriesMasterId,isCancelled,type",
         $orderby: "start/dateTime",
         $top: "500",
       })
@@ -375,10 +375,23 @@ export async function getSeriesConflicts(
 
         console.log(`[GRAPH] Got ${calendarResponse.value?.length || 0} total events on room calendar`)
 
-        // Filter out cancelled events and events from our series
-        const otherEvents = calendarResponse.value.filter(e =>
-          !e.isCancelled && e.seriesMasterId !== seriesMasterId && e.id !== seriesMasterId
-        )
+        // Log all events for debugging
+        calendarResponse.value?.forEach((e, i) => {
+          console.log(`[GRAPH] CalendarView event ${i}: subject="${e.subject}", start=${e.start?.dateTime}, seriesMasterId=${e.seriesMasterId}, type=${e.type}`)
+        })
+
+        // Get instance IDs to filter them out from "other events"
+        const instanceIds = new Set(instancesResponse.value.map(i => i.id))
+
+        // Filter out cancelled events, events from our series (by seriesMasterId), and the series master itself
+        const otherEvents = calendarResponse.value.filter(e => {
+          const isOurSeries = e.seriesMasterId === seriesMasterId || e.id === seriesMasterId || instanceIds.has(e.id)
+          const shouldInclude = !e.isCancelled && !isOurSeries
+          if (!shouldInclude && !e.isCancelled) {
+            console.log(`[GRAPH] Excluding from conflicts (our series): ${e.subject} - ${e.start?.dateTime}`)
+          }
+          return shouldInclude
+        })
 
         console.log(`[GRAPH] Found ${otherEvents.length} other active events to check for conflicts`)
 
@@ -395,7 +408,7 @@ export async function getSeriesConflicts(
             // Check for overlap: instance starts before other ends AND instance ends after other starts
             const overlaps = instanceStart < otherEnd && instanceEnd > otherStart
             if (overlaps) {
-              console.log(`[GRAPH] Conflict found: ${instance.start.dateTime} overlaps with ${other.subject} (${other.start.dateTime})`)
+              console.log(`[GRAPH] Conflict found: ${instance.start.dateTime} overlaps with "${other.subject}" (${other.start.dateTime})`)
             }
             return overlaps
           })
