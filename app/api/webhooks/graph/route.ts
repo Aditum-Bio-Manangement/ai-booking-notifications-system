@@ -67,18 +67,24 @@ async function getSeriesDataAsync(
   event: { type?: string; recurrence?: Parameters<typeof formatRecurrencePattern>[0]; seriesMasterId?: string },
   roomEmail: string
 ): Promise<{ isSeries: boolean; recurrencePattern?: string; seriesStartDate?: string; seriesEndDate?: string }> {
-  const isSeries = event.type === "seriesMaster" || event.type === "occurrence" || event.type === "exception" || !!event.recurrence
+  // An event is part of a series if:
+  // 1. It has type "seriesMaster", "occurrence", or "exception"
+  // 2. It has recurrence data (meaning it IS the series master)
+  // 3. It has a seriesMasterId (meaning it's an occurrence/exception of a series)
+  const isSeries = event.type === "seriesMaster" || event.type === "occurrence" || event.type === "exception" || !!event.recurrence || !!event.seriesMasterId
 
+  console.log(`[WEBHOOK] getSeriesDataAsync: type="${event.type}", hasRecurrence=${!!event.recurrence}, seriesMasterId="${event.seriesMasterId}", isSeries=${isSeries}`)
 
-
-  // If this is an occurrence or exception without recurrence data, fetch the series master
-  if (isSeries && !event.recurrence && event.seriesMasterId) {
-
+  // If this has a seriesMasterId (even without a recognized type), fetch the series master
+  if (event.seriesMasterId && !event.recurrence) {
+    console.log(`[WEBHOOK] Fetching series master ${event.seriesMasterId} for recurrence data`)
     try {
       const seriesMaster = await getRoomEvent(roomEmail, event.seriesMasterId)
+      console.log(`[WEBHOOK] Series master fetched: hasRecurrence=${!!seriesMaster.recurrence}, pattern=${seriesMaster.recurrence?.pattern?.type}`)
       if (seriesMaster.recurrence) {
         const recurrencePattern = formatRecurrencePattern(seriesMaster.recurrence)
         const { startDate, endDate } = formatSeriesDateRange(seriesMaster.recurrence)
+        console.log(`[WEBHOOK] Series pattern: "${recurrencePattern}", range: ${startDate} - ${endDate}`)
 
         return {
           isSeries: true,
@@ -94,6 +100,7 @@ async function getSeriesDataAsync(
 
   // Use local recurrence data if available
   if (!isSeries || !event.recurrence) {
+    console.log(`[WEBHOOK] getSeriesDataAsync returning: isSeries=${isSeries}, hasRecurrence=${!!event.recurrence}`)
     return { isSeries }
   }
 
@@ -534,6 +541,8 @@ async function processNotification(notification: GraphNotification) {
     }
 
     // Send acceptance notification with conflicts inline (like Outlook does)
+    console.log(`[WEBHOOK] Rendering accepted email with series data:`, JSON.stringify(acceptSeriesData))
+    console.log(`[WEBHOOK] Conflicts found: ${conflictDates.length}`)
     const htmlContent = renderAcceptedEmail({
       organizerName: event.organizer.emailAddress.name,
       organizerEmail,
@@ -638,6 +647,7 @@ async function processNotification(notification: GraphNotification) {
       return
     }
     console.log(`[WEBHOOK] Event DECLINED - preparing decline notification`)
+    console.log(`[WEBHOOK] Declined event type: ${event.type}, seriesMasterId: ${event.seriesMasterId}, hasRecurrence: ${!!event.recurrence}`)
     console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
 
     // Fetch the organizer's timezone from their mailbox settings
@@ -646,6 +656,8 @@ async function processNotification(notification: GraphNotification) {
 
     // Send decline notification using organizer's timezone
     const declineSeriesData = await getSeriesDataAsync(event, roomEmail)
+    console.log(`[WEBHOOK] Decline series data: isSeries=${declineSeriesData.isSeries}, pattern="${declineSeriesData.recurrencePattern}"`)
+
     const htmlContent = renderDeclinedEmail({
       organizerName: event.organizer.emailAddress.name,
       organizerEmail,
