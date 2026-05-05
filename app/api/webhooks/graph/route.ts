@@ -363,7 +363,92 @@ async function processNotification(notification: GraphNotification) {
 
       console.log(`[WEBHOOK] Event now ACCEPTED after retry - sending notification`)
       const retryAcceptTimezone = await getUserTimezone(organizerEmail)
-      const seriesData = await getSeriesDataAsync(updatedEvent, userIdOrEmail)
+      const seriesData = await getSeriesDataAsync(updatedEvent, roomEmail)
+
+      // For series events, check for conflicts with existing bookings
+      let retryConflictDates: Array<{ date: string; startTime: string; endTime: string; organizerName: string }> = []
+      let retryConflictEvents: Array<{ start: { dateTime: string }; end: { dateTime: string }; id: string }> = []
+
+      const retrySeriesMasterId = updatedEvent.recurrence
+        ? updatedEvent.id
+        : (updatedEvent.type === "seriesMaster"
+          ? updatedEvent.id
+          : (updatedEvent.seriesMasterId || updatedEvent.id))
+
+      console.log(`[WEBHOOK] Retry path - Series check: isSeries=${seriesData.isSeries}, eventId=${updatedEvent.id}, seriesMasterId=${retrySeriesMasterId}`)
+
+      if (seriesData.isSeries) {
+        console.log(`[WEBHOOK] Retry path - Checking for booking conflicts...`)
+
+        const seriesStart = seriesData.seriesStartDate
+          ? new Date(seriesData.seriesStartDate)
+          : new Date(updatedEvent.start.dateTime + "Z")
+        const startDateTime = seriesStart.toISOString()
+
+        const seriesEnd = seriesData.seriesEndDate
+          ? new Date(seriesData.seriesEndDate)
+          : new Date(seriesStart.getTime() + 6 * 30 * 24 * 60 * 60 * 1000)
+        const endDateTime = seriesEnd.toISOString()
+
+        console.log(`[WEBHOOK] Retry path - Checking conflicts from ${startDateTime} to ${endDateTime}`)
+
+        try {
+          const conflicts = await getSeriesConflicts(roomEmail, retrySeriesMasterId, startDateTime, endDateTime)
+
+          if (conflicts.length > 0) {
+            console.log(`[WEBHOOK] Retry path - Found ${conflicts.length} conflicting occurrences`)
+
+            retryConflictEvents = conflicts.map(c => ({
+              start: c.start,
+              end: c.end,
+              id: c.id
+            }))
+
+            // Format conflict dates for the email using the same approach as main path
+            const ianaTimezone = retryAcceptTimezone.includes("Eastern") ? "America/New_York" :
+              retryAcceptTimezone.includes("Pacific") ? "America/Los_Angeles" :
+                retryAcceptTimezone.includes("Central") ? "America/Chicago" : "America/New_York"
+
+            retryConflictDates = conflicts.map(conflict => {
+              const conflictStart = new Date(conflict.start.dateTime + "Z")
+              const conflictEnd = new Date(conflict.end.dateTime + "Z")
+
+              return {
+                date: conflictStart.toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                  timeZone: ianaTimezone
+                }),
+                startTime: conflictStart.toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: true,
+                  timeZone: ianaTimezone
+                }),
+                endTime: conflictEnd.toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: true,
+                  timeZone: ianaTimezone
+                }),
+                organizerName: updatedEvent.organizer.emailAddress.name,
+              }
+            })
+          } else {
+            console.log(`[WEBHOOK] Retry path - No conflicts found`)
+          }
+        } catch (conflictError) {
+          console.error(`[WEBHOOK] Retry path - Failed to check conflicts:`, conflictError)
+        }
+      }
+
+      console.log(`[WEBHOOK] Retry path - Rendering email with series data:`, JSON.stringify(seriesData))
+      console.log(`[WEBHOOK] Retry path - Conflicts found: ${retryConflictDates.length}`)
+
       const htmlContent = renderAcceptedEmail({
         organizerName: updatedEvent.organizer.emailAddress.name,
         organizerEmail,
@@ -377,17 +462,60 @@ async function processNotification(notification: GraphNotification) {
           email: a.emailAddress.address,
         })),
         ...seriesData,
+        conflictDates: retryConflictDates.length > 0 ? retryConflictDates : undefined,
       })
+
+      // Determine email subject - include conflict count if there are conflicts
+      const retrySubject = retryConflictDates.length > 0
+        ? `Room Confirmed (${retryConflictDates.length} conflict${retryConflictDates.length > 1 ? 's' : ''}): ${roomName} - ${updatedEvent.subject}`
+        : `Room Confirmed: ${roomName} - ${updatedEvent.subject}`
 
       try {
         await sendEmail(
           notificationMailbox,
           organizerEmail,
-          `Room Confirmed: ${roomName} - ${updatedEvent.subject}`,
+          retrySubject,
           htmlContent
         )
         emailsSentForEvents.set(eventId, Date.now())
         console.log(`[WEBHOOK] SUCCESS: Sent acceptance email after retry`)
+
+        // Send follow-up decline email for conflicting dates (like Outlook does)
+        if (retryConflictEvents.length > 0 && sendDeclineNotifications) {
+          console.log(`[WEBHOOK] Retry path - Sending follow-up decline email for ${retryConflictEvents.length} conflicting dates`)
+
+          // Get the first conflict for the email start/end times
+          const firstConflict = retryConflictEvents[0]
+
+          const declineHtmlContent = renderDeclinedEmail({
+            organizerName: updatedEvent.organizer.emailAddress.name,
+            organizerEmail,
+            roomName,
+            subject: updatedEvent.subject,
+            startTime: firstConflict.start.dateTime,
+            endTime: firstConflict.end.dateTime,
+            timeZone: retryAcceptTimezone,
+            reason: "This instance was declined because there are conflicts.",
+            attendees: updatedEvent.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
+              name: a.emailAddress.name,
+              email: a.emailAddress.address,
+            })),
+            ...seriesData,
+            conflictDates: retryConflictDates,
+          })
+
+          try {
+            await sendEmail(
+              notificationMailbox,
+              organizerEmail,
+              `Declined: ${updatedEvent.subject}`,
+              declineHtmlContent
+            )
+            console.log(`[WEBHOOK] SUCCESS: Sent follow-up decline email for conflicts after retry`)
+          } catch (declineEmailError) {
+            console.error(`[WEBHOOK] FAILED to send follow-up decline email:`, declineEmailError)
+          }
+        }
       } catch (emailError) {
         console.error(`[WEBHOOK] FAILED to send acceptance email:`, emailError)
       }
