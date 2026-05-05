@@ -319,112 +319,113 @@ export async function getRoomEvent(
   return graphRequest<CalendarEvent>(`/users/${roomEmail}/events/${eventId}?${params}`)
 }
 
-// Get all occurrences of a recurring series that were declined (conflicts)
+// Check for conflicts by comparing series instances against existing room bookings
 export async function getSeriesConflicts(
   roomEmail: string,
   seriesMasterId: string,
   startDateTime: string,
   endDateTime: string
 ): Promise<CalendarEvent[]> {
-  console.log(`[GRAPH] getSeriesConflicts called: roomEmail=${roomEmail}, seriesMasterId=${seriesMasterId}`)
-  console.log(`[GRAPH] Date range: ${startDateTime} to ${endDateTime}`)
-
-  // Get instances of the series within the date range
-  const instancesParams = new URLSearchParams({
-    startDateTime,
-    endDateTime,
-    $select: "id,subject,start,end,responseStatus,type,seriesMasterId",
-  })
+  console.log(`[GRAPH] getSeriesConflicts: checking room ${roomEmail} for conflicts`)
+  console.log(`[GRAPH] Series master ID: ${seriesMasterId}, date range: ${startDateTime} to ${endDateTime}`)
 
   try {
-    const instancesResponse = await graphRequest<{ value: CalendarEvent[] }>(
-      `/users/${roomEmail}/events/${seriesMasterId}/instances?${instancesParams}`
-    )
-
-    console.log(`[GRAPH] Got ${instancesResponse.value?.length || 0} instances from series`)
-
-    // Log all instances with their response status for debugging
-    instancesResponse.value?.forEach((event, i) => {
-      console.log(`[GRAPH] Instance ${i}: date=${event.start?.dateTime}, responseStatus=${JSON.stringify(event.responseStatus)}`)
+    // Step 1: Get all instances of the NEW series
+    const instancesParams = new URLSearchParams({
+      startDateTime,
+      endDateTime,
+      $select: "id,subject,start,end,responseStatus,type,seriesMasterId",
     })
 
-    // First try: Filter for declined occurrences by responseStatus
-    let declined = instancesResponse.value.filter(event =>
-      event.responseStatus?.response === "declined"
+    let seriesInstances: CalendarEvent[] = []
+    try {
+      const instancesResponse = await graphRequest<{ value: CalendarEvent[] }>(
+        `/users/${roomEmail}/events/${seriesMasterId}/instances?${instancesParams}`
+      )
+      seriesInstances = instancesResponse.value || []
+      console.log(`[GRAPH] Got ${seriesInstances.length} instances from new series`)
+    } catch (instancesError) {
+      console.error(`[GRAPH] Failed to get series instances:`, instancesError)
+      // Continue - we'll try to get conflicts from calendarView
+    }
+
+    // Step 2: Get ALL events on the room's calendar during the series date range
+    const calendarParams = new URLSearchParams({
+      startDateTime,
+      endDateTime,
+      $select: "id,subject,start,end,seriesMasterId,isCancelled,type,organizer",
+      $orderby: "start/dateTime",
+      $top: "500",
+    })
+
+    const calendarResponse = await graphRequest<{ value: CalendarEvent[] }>(
+      `/users/${roomEmail}/calendarView?${calendarParams}`
     )
 
-    console.log(`[GRAPH] Found ${declined.length} declined instances by responseStatus`)
+    const allEvents = calendarResponse.value || []
+    console.log(`[GRAPH] Got ${allEvents.length} total events on room calendar`)
 
-    // If no declined found by responseStatus, check for actual conflicts by querying all events
-    if (declined.length === 0 && instancesResponse.value?.length > 0) {
-      console.log(`[GRAPH] No declined by responseStatus, checking for actual booking conflicts...`)
+    // Step 3: Separate events into "our series" and "other bookings"
+    const ourSeriesIds = new Set<string>()
+    ourSeriesIds.add(seriesMasterId)
+    seriesInstances.forEach(i => {
+      ourSeriesIds.add(i.id)
+      if (i.seriesMasterId) ourSeriesIds.add(i.seriesMasterId)
+    })
 
-      // Get ALL events on this calendar during the series date range to find conflicts
-      const calendarParams = new URLSearchParams({
-        startDateTime,
-        endDateTime,
-        $select: "id,subject,start,end,seriesMasterId,isCancelled,type",
-        $orderby: "start/dateTime",
-        $top: "500",
-      })
+    // Events that belong to our series (the new booking)
+    const ourSeriesEvents = allEvents.filter(e =>
+      ourSeriesIds.has(e.id) ||
+      ourSeriesIds.has(e.seriesMasterId || '') ||
+      e.seriesMasterId === seriesMasterId
+    )
 
-      try {
-        const calendarResponse = await graphRequest<{ value: CalendarEvent[] }>(
-          `/users/${roomEmail}/calendarView?${calendarParams}`
-        )
+    // Events that are OTHER bookings (potential conflicts)
+    const otherBookings = allEvents.filter(e =>
+      !e.isCancelled &&
+      !ourSeriesIds.has(e.id) &&
+      !ourSeriesIds.has(e.seriesMasterId || '') &&
+      e.seriesMasterId !== seriesMasterId
+    )
 
-        console.log(`[GRAPH] Got ${calendarResponse.value?.length || 0} total events on room calendar`)
+    console.log(`[GRAPH] Our series has ${ourSeriesEvents.length} events on calendar`)
+    console.log(`[GRAPH] Found ${otherBookings.length} other bookings to check for conflicts`)
 
-        // Log all events for debugging
-        calendarResponse.value?.forEach((e, i) => {
-          console.log(`[GRAPH] CalendarView event ${i}: subject="${e.subject}", start=${e.start?.dateTime}, seriesMasterId=${e.seriesMasterId}, type=${e.type}`)
-        })
+    // Log other bookings for debugging
+    otherBookings.forEach((e, i) => {
+      console.log(`[GRAPH] Other booking ${i}: "${e.subject}" at ${e.start?.dateTime}`)
+    })
 
-        // Get instance IDs to filter them out from "other events"
-        const instanceIds = new Set(instancesResponse.value.map(i => i.id))
+    // Step 4: Use series instances if available, otherwise use our series events from calendarView
+    const instancesToCheck = seriesInstances.length > 0 ? seriesInstances : ourSeriesEvents
 
-        // Filter out cancelled events, events from our series (by seriesMasterId), and the series master itself
-        const otherEvents = calendarResponse.value.filter(e => {
-          const isOurSeries = e.seriesMasterId === seriesMasterId || e.id === seriesMasterId || instanceIds.has(e.id)
-          const shouldInclude = !e.isCancelled && !isOurSeries
-          if (!shouldInclude && !e.isCancelled) {
-            console.log(`[GRAPH] Excluding from conflicts (our series): ${e.subject} - ${e.start?.dateTime}`)
-          }
-          return shouldInclude
-        })
+    // Step 5: Find conflicts - instances that overlap with other bookings
+    const conflicts: CalendarEvent[] = []
 
-        console.log(`[GRAPH] Found ${otherEvents.length} other active events to check for conflicts`)
+    for (const instance of instancesToCheck) {
+      const instanceStart = new Date(instance.start.dateTime + "Z").getTime()
+      const instanceEnd = new Date(instance.end.dateTime + "Z").getTime()
 
-        // Check each instance against other events for time overlap
-        declined = instancesResponse.value.filter(instance => {
-          const instanceStart = new Date(instance.start.dateTime + "Z").getTime()
-          const instanceEnd = new Date(instance.end.dateTime + "Z").getTime()
+      for (const other of otherBookings) {
+        const otherStart = new Date(other.start.dateTime + "Z").getTime()
+        const otherEnd = new Date(other.end.dateTime + "Z").getTime()
 
-          // Check if this instance overlaps with any other event
-          const hasConflict = otherEvents.some(other => {
-            const otherStart = new Date(other.start.dateTime + "Z").getTime()
-            const otherEnd = new Date(other.end.dateTime + "Z").getTime()
+        // Check for time overlap
+        const overlaps = instanceStart < otherEnd && instanceEnd > otherStart
 
-            // Check for overlap: instance starts before other ends AND instance ends after other starts
-            const overlaps = instanceStart < otherEnd && instanceEnd > otherStart
-            if (overlaps) {
-              console.log(`[GRAPH] Conflict found: ${instance.start.dateTime} overlaps with "${other.subject}" (${other.start.dateTime})`)
-            }
-            return overlaps
-          })
-
-          return hasConflict
-        })
-
-        console.log(`[GRAPH] Found ${declined.length} conflicts by time overlap check`)
-      } catch (calendarError) {
-        console.error(`[GRAPH] Failed to get calendar view for conflict check:`, calendarError)
+        if (overlaps) {
+          console.log(`[GRAPH] CONFLICT: "${instance.subject}" (${instance.start.dateTime}) overlaps with "${other.subject}" (${other.start.dateTime})`)
+          conflicts.push(instance)
+          break // Only add once per instance
+        }
       }
     }
 
-    return declined
+    console.log(`[GRAPH] Found ${conflicts.length} total conflicts`)
+    return conflicts
+
   } catch (error) {
-    console.error(`[GRAPH] Failed to get series conflicts:`, error)
+    console.error(`[GRAPH] Failed to check series conflicts:`, error)
     return []
   }
 }

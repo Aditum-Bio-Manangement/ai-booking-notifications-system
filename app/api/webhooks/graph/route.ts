@@ -466,23 +466,33 @@ async function processNotification(notification: GraphNotification) {
     // Get series data and check for conflicts BEFORE sending accepted email
     const acceptSeriesData = await getSeriesDataAsync(event, roomEmail)
 
-    // For series events, check if any occurrences were declined due to conflicts
-    // seriesMasterId is: the event.id if this IS a series master (has recurrence), otherwise event.seriesMasterId
-    const seriesMasterId = event.recurrence ? event.id : (event.type === "seriesMaster" ? event.id : event.seriesMasterId)
+    // For series events, check if any occurrences have conflicts with existing bookings
+    // seriesMasterId is: the event.id if this IS a series master (has recurrence or type is seriesMaster), otherwise event.seriesMasterId
+    const seriesMasterId = event.recurrence
+      ? event.id
+      : (event.type === "seriesMaster"
+        ? event.id
+        : (event.seriesMasterId || event.id)) // fallback to event.id if no seriesMasterId
+
     let conflictDates: Array<{ date: string; startTime: string; endTime: string; organizerName: string }> = []
     let conflictEvents: Array<{ start: { dateTime: string }; end: { dateTime: string }; id: string }> = []
 
-    console.log(`[WEBHOOK] Series check: isSeries=${acceptSeriesData.isSeries}, eventType=${event.type}, hasRecurrence=${!!event.recurrence}, seriesMasterId=${seriesMasterId}`)
+    console.log(`[WEBHOOK] Series check: isSeries=${acceptSeriesData.isSeries}, eventType=${event.type}, hasRecurrence=${!!event.recurrence}, eventId=${event.id}, seriesMasterId=${seriesMasterId}`)
 
-    if (acceptSeriesData.isSeries && seriesMasterId) {
-      console.log(`[WEBHOOK] This is a series (type=${event.type}, masterId=${seriesMasterId}) - checking for declined occurrences...`)
+    if (acceptSeriesData.isSeries) {
+      console.log(`[WEBHOOK] This is a series - checking for booking conflicts...`)
 
-      // Calculate date range for checking conflicts based on series range or default 6 months
-      const startDateTime = new Date().toISOString()
-      const endDate = acceptSeriesData.seriesEndDate
+      // Calculate date range for checking conflicts based on series range
+      // Use series start date (or event start if not available) to catch all conflicts
+      const seriesStart = acceptSeriesData.seriesStartDate
+        ? new Date(acceptSeriesData.seriesStartDate)
+        : new Date(event.start.dateTime + "Z")
+      const startDateTime = seriesStart.toISOString()
+
+      const seriesEnd = acceptSeriesData.seriesEndDate
         ? new Date(acceptSeriesData.seriesEndDate)
-        : new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000) // 6 months default
-      const endDateTime = endDate.toISOString()
+        : new Date(seriesStart.getTime() + 6 * 30 * 24 * 60 * 60 * 1000) // 6 months default
+      const endDateTime = seriesEnd.toISOString()
 
       console.log(`[WEBHOOK] Checking series conflicts from ${startDateTime} to ${endDateTime}`)
 
