@@ -301,6 +301,25 @@ async function processNotification(notification: GraphNotification) {
     }
   }
 
+  // If we fetched the event from a user's calendar (GUID), re-fetch from the room's calendar
+  // to ensure we get accurate recurrence and series data from the room's perspective
+  let roomEvent = event
+  if (isGuid && roomEmail && roomEmail !== userIdOrEmail) {
+    console.log(`[WEBHOOK] Re-fetching event from room calendar (${roomEmail}) for accurate series data`)
+    try {
+      roomEvent = await getRoomEvent(roomEmail, eventId)
+      console.log(`[WEBHOOK] Room event fetched:`, JSON.stringify({
+        id: roomEvent.id,
+        type: roomEvent.type,
+        seriesMasterId: roomEvent.seriesMasterId,
+        hasRecurrence: !!roomEvent.recurrence,
+        recurrencePattern: roomEvent.recurrence?.pattern?.type,
+      }))
+    } catch (roomEventError) {
+      console.log(`[WEBHOOK] Could not fetch event from room calendar, using original event:`, roomEventError)
+    }
+  }
+
   // Get the notification email address (service mailbox)
   const notificationMailbox = process.env.NOTIFICATION_MAILBOX
   console.log(`[WEBHOOK] NOTIFICATION_MAILBOX:`, notificationMailbox ? "configured" : "NOT configured")
@@ -343,10 +362,22 @@ async function processNotification(notification: GraphNotification) {
     await new Promise(resolve => setTimeout(resolve, 2000))
 
     // Re-fetch the event to check if status updated
-    const updatedEvent = await getRoomEvent(userIdOrEmail, eventId)
+    // Fetch from room's calendar for accurate series data
+    let updatedEvent = await getRoomEvent(userIdOrEmail, eventId)
     const updatedStatus = updatedEvent.responseStatus?.response
 
     console.log(`[WEBHOOK] After retry, status is now: "${updatedStatus}"`)
+
+    // Re-fetch from room calendar if needed for accurate series data
+    if (roomEmail && roomEmail !== userIdOrEmail) {
+      console.log(`[WEBHOOK] Re-fetching updated event from room calendar (${roomEmail}) for series data`)
+      try {
+        updatedEvent = await getRoomEvent(roomEmail, eventId)
+        console.log(`[WEBHOOK] Updated room event: type=${updatedEvent.type}, hasRecurrence=${!!updatedEvent.recurrence}, seriesMasterId=${updatedEvent.seriesMasterId}`)
+      } catch (roomErr) {
+        console.log(`[WEBHOOK] Could not fetch from room calendar in retry:`, roomErr)
+      }
+    }
 
     if (updatedStatus === "accepted" || updatedStatus === "tentativelyAccepted") {
       // Check if we already sent an email for this event
@@ -495,7 +526,9 @@ async function processNotification(notification: GraphNotification) {
             startTime: firstConflict.start.dateTime,
             endTime: firstConflict.end.dateTime,
             timeZone: retryAcceptTimezone,
-            reason: "This instance was declined because there are conflicts.",
+            reason: retryConflictEvents.length === 1
+              ? "This instance was declined because there are conflicts."
+              : `These ${retryConflictEvents.length} instances were declined because there are conflicts.`,
             attendees: updatedEvent.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
               name: a.emailAddress.name,
               email: a.emailAddress.address,
@@ -592,20 +625,21 @@ async function processNotification(notification: GraphNotification) {
     console.log(`[WEBHOOK] Organizer timezone from mailbox settings: "${organizerTimezone}"`)
 
     // Get series data and check for conflicts BEFORE sending accepted email
-    const acceptSeriesData = await getSeriesDataAsync(event, roomEmail)
+    // Use roomEvent for series detection as it has accurate recurrence data from the room's calendar
+    const acceptSeriesData = await getSeriesDataAsync(roomEvent, roomEmail)
 
     // For series events, check if any occurrences have conflicts with existing bookings
     // seriesMasterId is: the event.id if this IS a series master (has recurrence or type is seriesMaster), otherwise event.seriesMasterId
-    const seriesMasterId = event.recurrence
-      ? event.id
-      : (event.type === "seriesMaster"
-        ? event.id
-        : (event.seriesMasterId || event.id)) // fallback to event.id if no seriesMasterId
+    const seriesMasterId = roomEvent.recurrence
+      ? roomEvent.id
+      : (roomEvent.type === "seriesMaster"
+        ? roomEvent.id
+        : (roomEvent.seriesMasterId || roomEvent.id)) // fallback to event.id if no seriesMasterId
 
     let conflictDates: Array<{ date: string; startTime: string; endTime: string; organizerName: string }> = []
     let conflictEvents: Array<{ start: { dateTime: string }; end: { dateTime: string }; id: string }> = []
 
-    console.log(`[WEBHOOK] Series check: isSeries=${acceptSeriesData.isSeries}, eventType=${event.type}, hasRecurrence=${!!event.recurrence}, eventId=${event.id}, seriesMasterId=${seriesMasterId}`)
+    console.log(`[WEBHOOK] Series check: isSeries=${acceptSeriesData.isSeries}, roomEventType=${roomEvent.type}, hasRecurrence=${!!roomEvent.recurrence}, eventId=${roomEvent.id}, seriesMasterId=${seriesMasterId}`)
 
     if (acceptSeriesData.isSeries) {
       console.log(`[WEBHOOK] This is a series - checking for booking conflicts...`)
@@ -712,61 +746,38 @@ async function processNotification(notification: GraphNotification) {
       emailsSentForEvents.set(eventId, Date.now())
       console.log(`[WEBHOOK] SUCCESS: Sent acceptance email for event ${eventId} to ${organizerEmail}`)
 
-      // Send individual declined emails for each conflict (like Outlook does)
-      if (conflictEvents.length > 0) {
-        console.log(`[WEBHOOK] Sending ${conflictEvents.length} individual decline notifications for conflicts...`)
+      // Send ONE decline email with ALL conflicts listed (like Outlook does)
+      if (conflictEvents.length > 0 && sendDeclineNotifications) {
+        console.log(`[WEBHOOK] Sending single decline notification with ${conflictEvents.length} conflicting dates...`)
 
-        const ianaTimezone = organizerTimezone.includes("Eastern") ? "America/New_York" :
-          organizerTimezone.includes("Pacific") ? "America/Los_Angeles" :
-            organizerTimezone.includes("Central") ? "America/Chicago" : "America/New_York"
+        try {
+          // Use the first conflict's date/time for the email header
+          const firstConflict = conflictEvents[0]
 
-        for (const conflict of conflictEvents) {
-          try {
-            const conflictStart = new Date(conflict.start.dateTime + "Z")
-            const conflictEnd = new Date(conflict.end.dateTime + "Z")
+          const declineHtml = renderDeclinedEmail({
+            organizerName: event.organizer.emailAddress.name,
+            organizerEmail,
+            roomName,
+            subject: event.subject,
+            startTime: firstConflict.start.dateTime,
+            endTime: firstConflict.end.dateTime,
+            timeZone: organizerTimezone,
+            reason: conflictEvents.length === 1
+              ? "This instance was declined because there are conflicts."
+              : `These ${conflictEvents.length} instances were declined because there are conflicts.`,
+            ...acceptSeriesData,
+            conflictDates: conflictDates, // Pass all conflicts to be listed in the email
+          })
 
-            const conflictDate = conflictStart.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "numeric",
-              day: "numeric",
-              year: "numeric",
-              timeZone: ianaTimezone
-            })
-            const conflictStartTime = conflictStart.toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true,
-              timeZone: ianaTimezone
-            })
-            const conflictEndTime = conflictEnd.toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true,
-              timeZone: ianaTimezone
-            })
-
-            const declineHtml = renderDeclinedEmail({
-              organizerName: event.organizer.emailAddress.name,
-              organizerEmail,
-              roomName,
-              subject: event.subject,
-              startTime: conflict.start.dateTime,
-              endTime: conflict.end.dateTime,
-              timeZone: organizerTimezone,
-              reason: `This instance was declined because there are conflicts. The room is already booked for ${conflictDate} ${conflictStartTime} - ${conflictEndTime}.`,
-              ...acceptSeriesData,
-            })
-
-            await sendEmail(
-              notificationMailbox,
-              organizerEmail,
-              `Declined: ${roomName} - ${event.subject} (${conflictDate} ${conflictStartTime} - ${conflictEndTime})`,
-              declineHtml
-            )
-            console.log(`[WEBHOOK] SUCCESS: Sent decline email for conflict on ${conflictDate}`)
-          } catch (conflictEmailError) {
-            console.error(`[WEBHOOK] Failed to send decline email for conflict:`, conflictEmailError)
-          }
+          await sendEmail(
+            notificationMailbox,
+            organizerEmail,
+            `Declined: ${roomName} - ${event.subject}`,
+            declineHtml
+          )
+          console.log(`[WEBHOOK] SUCCESS: Sent decline email for ${conflictEvents.length} conflicts`)
+        } catch (conflictEmailError) {
+          console.error(`[WEBHOOK] Failed to send decline email:`, conflictEmailError)
         }
       }
     } catch (emailError) {
@@ -785,7 +796,7 @@ async function processNotification(notification: GraphNotification) {
       return
     }
     console.log(`[WEBHOOK] Event DECLINED - preparing decline notification`)
-    console.log(`[WEBHOOK] Declined event type: ${event.type}, seriesMasterId: ${event.seriesMasterId}, hasRecurrence: ${!!event.recurrence}`)
+    console.log(`[WEBHOOK] Declined event type: ${roomEvent.type}, seriesMasterId: ${roomEvent.seriesMasterId}, hasRecurrence: ${!!roomEvent.recurrence}`)
     console.log(`[WEBHOOK] Sending to: ${organizerEmail}, From: ${notificationMailbox}`)
 
     // Fetch the organizer's timezone from their mailbox settings
@@ -793,7 +804,8 @@ async function processNotification(notification: GraphNotification) {
     console.log(`[WEBHOOK] Organizer timezone: "${organizerTimezoneDecline}"`)
 
     // Send decline notification using organizer's timezone
-    const declineSeriesData = await getSeriesDataAsync(event, roomEmail)
+    // Use roomEvent for accurate series data
+    const declineSeriesData = await getSeriesDataAsync(roomEvent, roomEmail)
     console.log(`[WEBHOOK] Decline series data: isSeries=${declineSeriesData.isSeries}, pattern="${declineSeriesData.recurrencePattern}"`)
 
     const htmlContent = renderDeclinedEmail({
