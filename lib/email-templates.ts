@@ -655,6 +655,195 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
 `
 }
 
+// Render a declined email specifically for series conflicts - lists ALL conflicts in main card
+export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
+  const logoUrl = data.logoUrl || process.env.LOGO_URL || "https://ai-booking-notifications-system.onrender.com/images/aditum-logo-horizontal.png"
+  const timezoneDisplay = getTimezoneDisplayName(data.timeZone)
+
+  // Build conflict list showing organizer and time for each conflict
+  let conflictListHtml = ""
+  if (data.conflictDates && data.conflictDates.length > 0) {
+    conflictListHtml = data.conflictDates.map(conflict => `
+      <tr>
+        <td style="padding: 10px 0; border-bottom: 1px solid #4a5568;">
+          <span style="color: #e53e3e; font-weight: 500;">${conflict.organizerName || data.organizerName}</span>
+          <span style="color: #cbd5e0;"> - </span>
+          <span style="color: #f6ad55;">${conflict.date} ${conflict.startTime}</span>
+          <span style="color: #cbd5e0;"> to </span>
+          <span style="color: #f6ad55;">${conflict.date} ${conflict.endTime}</span>
+        </td>
+      </tr>
+    `).join("")
+  }
+
+  // Series badge section
+  const seriesBadges = data.isSeries ? `
+    <div style="margin: 16px 0;">
+      <span style="display: inline-block; background-color: #425cc7; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Recurring</span>
+      <span style="display: inline-block; background-color: #425cc7; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Meeting</span>
+      <span style="display: inline-block; background-color: #425cc7; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Series</span>
+    </div>
+  ` : ""
+
+  const seriesInfo = data.isSeries && data.recurrencePattern ? `
+    <tr>
+      <td style="padding: 16px 0; border-bottom: 1px solid #4a5568;">
+        ${seriesBadges}
+        <p style="margin: 0; color: #ffffff; font-size: 16px; font-weight: 500;">${data.recurrencePattern}</p>
+        ${data.seriesStartDate && data.seriesEndDate
+      ? `<p style="margin: 4px 0 0; color: #a0aec0; font-size: 14px;">${data.seriesStartDate} - ${data.seriesEndDate}</p>`
+      : ""}
+      </td>
+    </tr>
+  ` : ""
+
+  const reasonText = data.conflictDates && data.conflictDates.length > 1
+    ? `These ${data.conflictDates.length} instances were declined because there are conflicts.`
+    : "This instance was declined because there are conflicts."
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room Unavailable</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #1a202c;">
+  <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #1a202c;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #2d3748; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color: #9b2c2c; padding: 24px 32px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                <tr>
+                  <td style="vertical-align: middle;" valign="middle" width="120">
+                    <img src="${logoUrl}" alt="Aditum Bio" style="height: 60px; display: block;" height="60">
+                  </td>
+                  <td style="vertical-align: middle; padding-left: 20px;" valign="middle">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600;">Room Unavailable</h1>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 32px;">
+              <p style="margin: 0 0 16px; color: #e2e8f0; font-size: 16px; line-height: 1.6;">
+                Hi ${data.organizerName},
+              </p>
+              
+              <p style="margin: 0 0 24px; color: #e2e8f0; font-size: 16px; line-height: 1.6;">
+                Unfortunately, your room booking request could not be confirmed.
+              </p>
+              
+              <!-- Reason Banner -->
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #742a2a; border-radius: 6px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <p style="margin: 0; color: #feb2b2; font-size: 14px;">
+                      <strong style="color: #fc8181;">Reason:</strong> ${reasonText}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Conflicts Card - Main card showing all conflicts -->
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #3d4a5c; border-radius: 8px; border-left: 4px solid #e53e3e; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 24px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                      <!-- Meeting Title -->
+                      <tr>
+                        <td style="padding-bottom: 16px; border-bottom: 1px solid #4a5568;">
+                          <p style="margin: 0; color: #a0aec0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Declined Instances</p>
+                          <p style="margin: 4px 0 0; color: #63b3ed; font-size: 18px; font-weight: 600;">${data.subject}</p>
+                        </td>
+                      </tr>
+                      
+                      <!-- Room -->
+                      <tr>
+                        <td style="padding: 16px 0; border-bottom: 1px solid #4a5568;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                            <tr>
+                              <td width="50%">
+                                <p style="margin: 0; color: #a0aec0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Room</p>
+                                <p style="margin: 4px 0 0; color: #ffffff; font-size: 16px; font-weight: 500;">${data.roomName}</p>
+                              </td>
+                              <td width="50%">
+                                <p style="margin: 0; color: #a0aec0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Time Zone</p>
+                                <p style="margin: 4px 0 0; color: #ffffff; font-size: 16px;">${timezoneDisplay}</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      
+                      <!-- Conflicts List Header -->
+                      <tr>
+                        <td style="padding: 16px 0 8px 0;">
+                          <p style="margin: 0; color: #fc8181; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                            The conflicts are:
+                          </p>
+                          <p style="margin: 8px 0 0; color: #a0aec0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            Organizer and Time of Conflicting Meeting
+                          </p>
+                        </td>
+                      </tr>
+                      
+                      <!-- Conflicts List -->
+                      <tr>
+                        <td>
+                          <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                            ${conflictListHtml}
+                          </table>
+                        </td>
+                      </tr>
+                      
+                      ${seriesInfo}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- What You Can Do Card -->
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #3d4a5c; border-radius: 8px; border-left: 4px solid #4299e1;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <p style="margin: 0 0 12px; color: #90cdf4; font-size: 14px; font-weight: 600;">What you can do:</p>
+                    <ul style="margin: 0; padding-left: 20px; color: #e2e8f0; font-size: 14px; line-height: 1.8;">
+                      <li>Check for available time slots in Outlook</li>
+                      <li>Try booking a different room</li>
+                      <li>Contact the current room holder to negotiate</li>
+                    </ul>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #1a202c; padding: 24px 32px; border-top: 1px solid #4a5568;">
+              <p style="margin: 0; color: #718096; font-size: 12px; text-align: center;">
+                This is an automated message from the Aditum Bio Room Booking System.<br>
+                Please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
+}
+
 export function getEmailSubject(type: "accepted" | "declined", data: EmailTemplateData): string {
   // Use custom template subject if available
   const customTemplate = customTemplatesCache[type]

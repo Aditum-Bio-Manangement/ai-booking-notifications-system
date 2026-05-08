@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getRoomEvent, sendEmail, getUserTimezone, formatRecurrencePattern, formatSeriesDateRange, getSeriesConflicts } from "@/lib/microsoft-graph"
-import { renderAcceptedEmail, renderDeclinedEmail, renderSeriesConflictEmail } from "@/lib/email-templates"
+import { renderAcceptedEmail, renderDeclinedEmail, renderSeriesConflictEmail, renderSeriesDeclinedEmail } from "@/lib/email-templates"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // Store processed notifications to ensure idempotency (prevents duplicate webhook processing)
@@ -519,7 +519,8 @@ async function processNotification(notification: GraphNotification) {
           // Get the first conflict for the email start/end times
           const firstConflict = retryConflictEvents[0]
 
-          const declineHtmlContent = renderDeclinedEmail({
+          // Use the special series declined template that shows all conflicts in the main card
+          const declineHtmlContent = renderSeriesDeclinedEmail({
             organizerName: updatedEvent.organizer.emailAddress.name,
             organizerEmail,
             roomName,
@@ -527,9 +528,6 @@ async function processNotification(notification: GraphNotification) {
             startTime: firstConflict.start.dateTime,
             endTime: firstConflict.end.dateTime,
             timeZone: retryAcceptTimezone,
-            reason: retryConflictEvents.length === 1
-              ? "This instance was declined because there are conflicts."
-              : `These ${retryConflictEvents.length} instances were declined because there are conflicts.`,
             attendees: updatedEvent.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
               name: a.emailAddress.name,
               email: a.emailAddress.address,
@@ -758,7 +756,8 @@ async function processNotification(notification: GraphNotification) {
           // Use the first conflict's date/time for the email header
           const firstConflict = conflictEvents[0]
 
-          const declineHtml = renderDeclinedEmail({
+          // Use the special series declined template that shows all conflicts in the main card
+          const declineHtml = renderSeriesDeclinedEmail({
             organizerName: event.organizer.emailAddress.name,
             organizerEmail,
             roomName,
@@ -766,9 +765,6 @@ async function processNotification(notification: GraphNotification) {
             startTime: firstConflict.start.dateTime,
             endTime: firstConflict.end.dateTime,
             timeZone: organizerTimezone,
-            reason: conflictEvents.length === 1
-              ? "This instance was declined because there are conflicts."
-              : `These ${conflictEvents.length} instances were declined because there are conflicts.`,
             ...acceptSeriesData,
             conflictDates: conflictDates, // Pass all conflicts to be listed in the email
           })

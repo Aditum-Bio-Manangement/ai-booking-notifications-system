@@ -319,9 +319,8 @@ export async function getRoomEvent(
   return graphRequest<CalendarEvent>(`/users/${roomEmail}/events/${eventId}?${params}`)
 }
 
-// Check for conflicts by detecting MISSING instances in a recurring series
-// When Graph declines an occurrence due to conflict, it's NOT returned by /instances endpoint
-// So we generate expected dates and find which ones are missing (those are the conflicts)
+// Check for conflicts by finding the ACTUAL conflicting events on the room's calendar
+// This queries the calendar for existing bookings that overlap with the new series time slots
 export async function getSeriesConflicts(
   roomEmail: string,
   seriesMasterId: string,
@@ -332,25 +331,24 @@ export async function getSeriesConflicts(
   console.log(`[GRAPH] Series master ID: ${seriesMasterId}, date range: ${startDateTime} to ${endDateTime}`)
 
   try {
-    // Step 1: Get the series master to understand the recurrence pattern
+    // Step 1: Get the series master to understand the meeting time
     const seriesMaster = await graphRequest<CalendarEvent>(
       `/users/${roomEmail}/events/${seriesMasterId}?$select=id,subject,start,end,recurrence,type`
     )
 
     if (!seriesMaster.recurrence) {
-      console.log(`[GRAPH] Series master has no recurrence data, cannot detect conflicts`)
+      console.log(`[GRAPH] Series master has no recurrence data`)
       return []
     }
 
-    console.log(`[GRAPH] Series recurrence pattern:`, JSON.stringify(seriesMaster.recurrence.pattern))
-    console.log(`[GRAPH] Series recurrence range:`, JSON.stringify(seriesMaster.recurrence.range))
+    console.log(`[GRAPH] Series: ${seriesMaster.subject}, time=${seriesMaster.start.dateTime}`)
 
-    // Step 2: Get returned instances (these are ACCEPTED - declined ones are filtered out by Graph)
+    // Step 2: Get the ACCEPTED instances (declined ones are NOT returned by Graph)
     const instancesParams = new URLSearchParams({
       startDateTime,
       endDateTime,
       $select: "id,subject,start,end,responseStatus,type,seriesMasterId",
-      $top: "100",
+      $top: "200",
     })
 
     let acceptedInstances: CalendarEvent[] = []
@@ -359,70 +357,93 @@ export async function getSeriesConflicts(
         `/users/${roomEmail}/events/${seriesMasterId}/instances?${instancesParams}`
       )
       acceptedInstances = instancesResponse.value || []
-      console.log(`[GRAPH] Got ${acceptedInstances.length} accepted instances`)
+      console.log(`[GRAPH] Got ${acceptedInstances.length} accepted instances from series`)
     } catch (instancesError) {
       console.error(`[GRAPH] Failed to get series instances:`, instancesError)
       return []
     }
 
-    // Step 3: Generate ALL expected dates based on recurrence pattern
-    const expectedDates = generateExpectedDates(
-      seriesMaster.recurrence,
-      startDateTime,
-      endDateTime
-    )
-    console.log(`[GRAPH] Generated ${expectedDates.length} expected occurrence dates`)
-    expectedDates.forEach(d => console.log(`[GRAPH] Expected: ${d.toISOString().split('T')[0]}`))
-
-    // Step 4: Build set of accepted dates (normalize to YYYY-MM-DD)
-    const acceptedDateSet = new Set(
+    // Build a set of accepted instance dates (YYYY-MM-DD format)
+    const acceptedDates = new Set(
       acceptedInstances.map(inst => {
         const d = new Date(inst.start.dateTime + "Z")
         return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
       })
     )
-    console.log(`[GRAPH] Accepted dates:`, Array.from(acceptedDateSet))
+    console.log(`[GRAPH] Accepted dates: ${Array.from(acceptedDates).join(', ')}`)
 
-    // Step 5: Find MISSING dates (these are the conflicts)
-    const missingDates = expectedDates.filter(expected => {
-      const dateStr = `${expected.getUTCFullYear()}-${String(expected.getUTCMonth() + 1).padStart(2, '0')}-${String(expected.getUTCDate()).padStart(2, '0')}`
-      return !acceptedDateSet.has(dateStr)
+    // Step 3: Get ALL events on the room calendar during the date range
+    const calendarParams = new URLSearchParams({
+      startDateTime,
+      endDateTime,
+      $select: "id,subject,start,end,seriesMasterId,isCancelled,type,organizer",
+      $orderby: "start/dateTime",
+      $top: "500",
     })
 
-    console.log(`[GRAPH] Missing dates (conflicts): ${missingDates.length}`)
-    missingDates.forEach(d => console.log(`[GRAPH] CONFLICT on: ${d.toISOString().split('T')[0]}`))
+    const calendarResponse = await graphRequest<{ value: CalendarEvent[] }>(
+      `/users/${roomEmail}/calendarView?${calendarParams}`
+    )
 
-    // Step 6: Create CalendarEvent objects for the missing (conflicting) dates
-    const startTimeParts = seriesMaster.start.dateTime.split('T')[1] || "00:00:00"
-    const meetingDuration = new Date(seriesMaster.end.dateTime + "Z").getTime() - new Date(seriesMaster.start.dateTime + "Z").getTime()
+    const allEvents = calendarResponse.value || []
+    console.log(`[GRAPH] Got ${allEvents.length} total events on room calendar`)
 
-    const conflicts: CalendarEvent[] = missingDates.map(missingDate => {
-      // Parse hours/minutes from the series start time
-      const timeParts = startTimeParts.split(':')
-      const hours = parseInt(timeParts[0], 10)
-      const minutes = parseInt(timeParts[1], 10)
-
-      const startDT = new Date(missingDate)
-      startDT.setUTCHours(hours, minutes, 0, 0)
-      const endDT = new Date(startDT.getTime() + meetingDuration)
-
-      return {
-        id: `conflict-${missingDate.toISOString()}`,
-        subject: seriesMaster.subject,
-        start: {
-          dateTime: startDT.toISOString().replace('Z', '').split('.')[0] + '.0000000',
-          timeZone: "UTC"
-        },
-        end: {
-          dateTime: endDT.toISOString().replace('Z', '').split('.')[0] + '.0000000',
-          timeZone: "UTC"
-        },
-        type: "exception",
-        responseStatus: { response: "declined", time: new Date().toISOString() },
-      } as CalendarEvent
+    // Step 4: Find events that are NOT part of our series (these are potential conflicts)
+    // An event is part of our series if it has seriesMasterId === seriesMasterId or id === seriesMasterId
+    const otherBookings = allEvents.filter(e => {
+      if (e.isCancelled) return false
+      if (e.id === seriesMasterId) return false
+      if (e.seriesMasterId === seriesMasterId) return false
+      return true
     })
 
-    console.log(`[GRAPH] Found ${conflicts.length} total conflicts (missing instances)`)
+    console.log(`[GRAPH] Found ${otherBookings.length} other bookings on calendar`)
+
+    // Step 5: Extract the meeting time from series master (hours:minutes)
+    const seriesStartTime = seriesMaster.start.dateTime.split('T')[1]?.substring(0, 5) || "00:00"
+    const seriesEndTime = seriesMaster.end.dateTime.split('T')[1]?.substring(0, 5) || "00:00"
+    console.log(`[GRAPH] Series time slot: ${seriesStartTime} - ${seriesEndTime}`)
+
+    // Step 6: Find conflicts - other bookings that:
+    // a) Are on a date that SHOULD have a series occurrence (based on recurrence pattern), AND
+    // b) Overlap with the series time slot
+    const conflicts: CalendarEvent[] = []
+
+    for (const booking of otherBookings) {
+      const bookingDate = new Date(booking.start.dateTime + "Z")
+      const bookingDateStr = `${bookingDate.getUTCFullYear()}-${String(bookingDate.getUTCMonth() + 1).padStart(2, '0')}-${String(bookingDate.getUTCDate()).padStart(2, '0')}`
+
+      // If this date already has an accepted instance, it's not a conflict
+      if (acceptedDates.has(bookingDateStr)) {
+        continue
+      }
+
+      // Check if this date SHOULD have had a series occurrence
+      // by checking if it matches the recurrence pattern
+      if (!matchesRecurrencePattern(bookingDate, seriesMaster.recurrence)) {
+        continue
+      }
+
+      // Check time overlap
+      const bookingStartTime = booking.start.dateTime.split('T')[1]?.substring(0, 5) || "00:00"
+      const bookingEndTime = booking.end.dateTime.split('T')[1]?.substring(0, 5) || "00:00"
+
+      // Simple time overlap check (convert to minutes for comparison)
+      const seriesStartMins = timeToMinutes(seriesStartTime)
+      const seriesEndMins = timeToMinutes(seriesEndTime)
+      const bookingStartMins = timeToMinutes(bookingStartTime)
+      const bookingEndMins = timeToMinutes(bookingEndTime)
+
+      const overlaps = seriesStartMins < bookingEndMins && seriesEndMins > bookingStartMins
+
+      if (overlaps) {
+        console.log(`[GRAPH] CONFLICT: "${booking.subject}" on ${bookingDateStr} ${bookingStartTime}-${bookingEndTime} conflicts with series ${seriesStartTime}-${seriesEndTime}`)
+        // Return the ACTUAL conflicting booking with its real date/time
+        conflicts.push(booking)
+      }
+    }
+
+    console.log(`[GRAPH] Found ${conflicts.length} actual conflicting events`)
     return conflicts
 
   } catch (error) {
@@ -431,100 +452,68 @@ export async function getSeriesConflicts(
   }
 }
 
-// Generate expected occurrence dates based on recurrence pattern
-function generateExpectedDates(
-  recurrence: NonNullable<CalendarEvent["recurrence"]>,
-  rangeStart: string,
-  rangeEnd: string
-): Date[] {
-  const dates: Date[] = []
+// Helper: Convert time string "HH:MM" to minutes since midnight
+function timeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+// Helper: Check if a date matches the recurrence pattern
+function matchesRecurrencePattern(date: Date, recurrence: NonNullable<CalendarEvent["recurrence"]>): boolean {
   const { pattern, range } = recurrence
 
-  const seriesStartDate = new Date(range.startDate + "T00:00:00Z")
-  const queryStart = new Date(rangeStart)
-  const queryEnd = new Date(rangeEnd)
+  const seriesStart = new Date(range.startDate + "T00:00:00Z")
+  const seriesEnd = range.endDate ? new Date(range.endDate + "T23:59:59Z") : null
 
-  // Determine series end date
-  let seriesEndDate: Date
-  if (range.type === "endDate" && range.endDate) {
-    seriesEndDate = new Date(range.endDate + "T23:59:59Z")
-  } else if (range.type === "noEnd") {
-    seriesEndDate = queryEnd
-  } else {
-    seriesEndDate = queryEnd
-  }
-
-  // Clamp to query range
-  const effectiveStart = seriesStartDate > queryStart ? seriesStartDate : queryStart
-  const effectiveEnd = seriesEndDate < queryEnd ? seriesEndDate : queryEnd
-
-  console.log(`[GRAPH] Generating dates: pattern=${pattern.type}, interval=${pattern.interval}`)
-  console.log(`[GRAPH] Range: ${effectiveStart.toISOString().split('T')[0]} to ${effectiveEnd.toISOString().split('T')[0]}`)
+  // Date must be within series range
+  if (date < seriesStart) return false
+  if (seriesEnd && date > seriesEnd) return false
 
   if (pattern.type === "weekly") {
-    // Map day names to numbers (0=Sunday, 1=Monday, etc.)
+    // Check if the day of week matches
     const dayMap: Record<string, number> = {
       sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
       thursday: 4, friday: 5, saturday: 6
     }
     const targetDays = (pattern.daysOfWeek || []).map(d => dayMap[d.toLowerCase()]).filter(d => d !== undefined)
 
-    if (targetDays.length === 0) {
-      // If no days specified, use the start day
-      targetDays.push(seriesStartDate.getUTCDay())
+    if (!targetDays.includes(date.getUTCDay())) {
+      return false
     }
 
-    console.log(`[GRAPH] Weekly on days: ${targetDays} (0=Sun, 1=Mon, ...)`)
-
-    // Start from series start, iterate week by week
-    let currentWeekStart = new Date(seriesStartDate)
-    // Move to start of week (Sunday)
-    currentWeekStart.setUTCDate(currentWeekStart.getUTCDate() - currentWeekStart.getUTCDay())
-
-    let occurrenceCount = 0
-    const maxOccurrences = range.numberOfOccurrences || 200
-
-    while (currentWeekStart <= effectiveEnd && occurrenceCount < maxOccurrences) {
-      for (const targetDay of targetDays) {
-        const occurrenceDate = new Date(currentWeekStart)
-        occurrenceDate.setUTCDate(occurrenceDate.getUTCDate() + targetDay)
-
-        if (occurrenceDate >= seriesStartDate && occurrenceDate >= effectiveStart && occurrenceDate <= effectiveEnd) {
-          dates.push(new Date(occurrenceDate))
-          occurrenceCount++
-          if (range.type === "numbered" && occurrenceCount >= maxOccurrences) break
-        }
+    // Check interval (every N weeks)
+    if (pattern.interval > 1) {
+      const weeksDiff = Math.floor((date.getTime() - seriesStart.getTime()) / (7 * 24 * 60 * 60 * 1000))
+      if (weeksDiff % pattern.interval !== 0) {
+        return false
       }
-      // Move to next occurrence week
-      currentWeekStart.setUTCDate(currentWeekStart.getUTCDate() + (7 * pattern.interval))
     }
+
+    return true
   } else if (pattern.type === "daily") {
-    let currentDate = new Date(seriesStartDate)
-    let occurrenceCount = 0
-    const maxOccurrences = range.numberOfOccurrences || 200
-
-    while (currentDate <= effectiveEnd && occurrenceCount < maxOccurrences) {
-      if (currentDate >= effectiveStart) {
-        dates.push(new Date(currentDate))
-        occurrenceCount++
+    if (pattern.interval > 1) {
+      const daysDiff = Math.floor((date.getTime() - seriesStart.getTime()) / (24 * 60 * 60 * 1000))
+      if (daysDiff % pattern.interval !== 0) {
+        return false
       }
-      currentDate.setUTCDate(currentDate.getUTCDate() + pattern.interval)
     }
+    return true
   } else if (pattern.type === "absoluteMonthly") {
-    let currentDate = new Date(seriesStartDate)
-    let occurrenceCount = 0
-    const maxOccurrences = range.numberOfOccurrences || 200
-
-    while (currentDate <= effectiveEnd && occurrenceCount < maxOccurrences) {
-      if (currentDate >= effectiveStart) {
-        dates.push(new Date(currentDate))
-        occurrenceCount++
-      }
-      currentDate.setUTCMonth(currentDate.getUTCMonth() + pattern.interval)
+    // Check if day of month matches
+    if (date.getUTCDate() !== seriesStart.getUTCDate()) {
+      return false
     }
+    if (pattern.interval > 1) {
+      const monthsDiff = (date.getUTCFullYear() - seriesStart.getUTCFullYear()) * 12 +
+        (date.getUTCMonth() - seriesStart.getUTCMonth())
+      if (monthsDiff % pattern.interval !== 0) {
+        return false
+      }
+    }
+    return true
   }
 
-  return dates
+  return false
 }
 
 // Get a user's timezone from their mailbox settings
