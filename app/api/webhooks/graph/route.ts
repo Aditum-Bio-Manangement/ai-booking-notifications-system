@@ -409,7 +409,8 @@ async function processNotification(notification: GraphNotification) {
       console.log(`[WEBHOOK] Retry path - Series check: isSeries=${seriesData.isSeries}, eventId=${updatedEvent.id}, seriesMasterId=${retrySeriesMasterId}`)
 
       if (seriesData.isSeries) {
-        console.log(`[WEBHOOK] Retry path - Checking for booking conflicts...`)
+        console.log(`[WEBHOOK] Retry path - Waiting 1s for Graph to process conflicts...`)
+        await new Promise(resolve => setTimeout(resolve, 1000))
 
         const seriesStart = seriesData.seriesStartDate
           ? new Date(seriesData.seriesStartDate)
@@ -642,7 +643,10 @@ async function processNotification(notification: GraphNotification) {
     console.log(`[WEBHOOK] Series check: isSeries=${acceptSeriesData.isSeries}, roomEventType=${roomEvent.type}, hasRecurrence=${!!roomEvent.recurrence}, eventId=${roomEvent.id}, seriesMasterId=${seriesMasterId}`)
 
     if (acceptSeriesData.isSeries) {
-      console.log(`[WEBHOOK] This is a series - checking for booking conflicts...`)
+      console.log(`[WEBHOOK] This is a series - waiting 1s for Graph to process conflicts...`)
+
+      // Give Graph API time to process conflicts before we check
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
       // Calculate date range for checking conflicts based on series range
       // Use series start date (or event start if not available) to catch all conflicts

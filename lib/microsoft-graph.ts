@@ -344,12 +344,27 @@ export async function getSeriesConflicts(
       )
       seriesInstances = instancesResponse.value || []
       console.log(`[GRAPH] Got ${seriesInstances.length} instances from new series`)
+      seriesInstances.forEach((inst, i) => {
+        console.log(`[GRAPH] Series instance ${i}: ${inst.start?.dateTime} - ${inst.end?.dateTime}, responseStatus=${inst.responseStatus?.response}`)
+      })
     } catch (instancesError) {
       console.error(`[GRAPH] Failed to get series instances:`, instancesError)
-      // Continue - we'll try to get conflicts from calendarView
     }
 
-    // Step 2: Get ALL events on the room's calendar during the series date range
+    // Step 2: Check for conflicts using responseStatus first
+    // If the room has already declined an instance, its responseStatus will be "declined"
+    const declinedInstances = seriesInstances.filter(inst =>
+      inst.responseStatus?.response === "declined"
+    )
+
+    if (declinedInstances.length > 0) {
+      console.log(`[GRAPH] Found ${declinedInstances.length} declined instances (conflicts detected by room)`)
+      return declinedInstances
+    }
+
+    // Step 3: If no declined instances found, check manually by comparing to calendar
+    console.log(`[GRAPH] No declined instances found, checking calendar for conflicts...`)
+
     const calendarParams = new URLSearchParams({
       startDateTime,
       endDateTime,
@@ -365,7 +380,7 @@ export async function getSeriesConflicts(
     const allEvents = calendarResponse.value || []
     console.log(`[GRAPH] Got ${allEvents.length} total events on room calendar`)
 
-    // Step 3: Separate events into "our series" and "other bookings"
+    // Build a set of our series IDs
     const ourSeriesIds = new Set<string>()
     ourSeriesIds.add(seriesMasterId)
     seriesInstances.forEach(i => {
@@ -373,34 +388,20 @@ export async function getSeriesConflicts(
       if (i.seriesMasterId) ourSeriesIds.add(i.seriesMasterId)
     })
 
-    // Events that belong to our series (the new booking)
-    const ourSeriesEvents = allEvents.filter(e =>
-      ourSeriesIds.has(e.id) ||
-      ourSeriesIds.has(e.seriesMasterId || '') ||
-      e.seriesMasterId === seriesMasterId
-    )
-
-    // Events that are OTHER bookings (potential conflicts)
-    const otherBookings = allEvents.filter(e =>
-      !e.isCancelled &&
-      !ourSeriesIds.has(e.id) &&
-      !ourSeriesIds.has(e.seriesMasterId || '') &&
-      e.seriesMasterId !== seriesMasterId
-    )
-
-    console.log(`[GRAPH] Our series has ${ourSeriesEvents.length} events on calendar`)
-    console.log(`[GRAPH] Found ${otherBookings.length} other bookings to check for conflicts`)
-
-    // Log other bookings for debugging
-    otherBookings.forEach((e, i) => {
-      console.log(`[GRAPH] Other booking ${i}: "${e.subject}" at ${e.start?.dateTime}`)
+    // Filter to get other bookings (not part of our series)
+    const otherBookings = allEvents.filter(e => {
+      if (e.isCancelled) return false
+      if (e.id === seriesMasterId) return false
+      if (e.seriesMasterId === seriesMasterId) return false
+      if (ourSeriesIds.has(e.id)) return false
+      return true
     })
 
-    // Step 4: Use series instances if available, otherwise use our series events from calendarView
-    const instancesToCheck = seriesInstances.length > 0 ? seriesInstances : ourSeriesEvents
+    console.log(`[GRAPH] Found ${otherBookings.length} other bookings to check for conflicts`)
 
-    // Step 5: Find conflicts - instances that overlap with other bookings
+    // Find overlapping instances
     const conflicts: CalendarEvent[] = []
+    const instancesToCheck = seriesInstances.length > 0 ? seriesInstances : []
 
     for (const instance of instancesToCheck) {
       const instanceStart = new Date(instance.start.dateTime + "Z").getTime()
@@ -410,13 +411,12 @@ export async function getSeriesConflicts(
         const otherStart = new Date(other.start.dateTime + "Z").getTime()
         const otherEnd = new Date(other.end.dateTime + "Z").getTime()
 
-        // Check for time overlap
         const overlaps = instanceStart < otherEnd && instanceEnd > otherStart
 
         if (overlaps) {
           console.log(`[GRAPH] CONFLICT: "${instance.subject}" (${instance.start.dateTime}) overlaps with "${other.subject}" (${other.start.dateTime})`)
           conflicts.push(instance)
-          break // Only add once per instance
+          break
         }
       }
     }
