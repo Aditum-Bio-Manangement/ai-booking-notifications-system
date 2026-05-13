@@ -9,6 +9,26 @@ const processedNotifications = new Map<string, number>()
 // Store events for which we've already sent email notifications (prevents duplicate emails)
 const emailsSentForEvents = new Map<string, number>()
 
+// Cache event details when first seen - needed for decline emails when event is deleted
+interface CachedEventData {
+  eventId: string
+  roomEmail: string
+  roomName: string
+  organizerEmail: string
+  organizerName: string
+  subject: string
+  startDateTime: string
+  endDateTime: string
+  timeZone: string
+  isSeries: boolean
+  recurrencePattern?: string
+  seriesStartDate?: string
+  seriesEndDate?: string
+  attendees?: Array<{ name: string; email: string }>
+  timestamp: number
+}
+const eventCache = new Map<string, CachedEventData>()
+
 // Clean up old entries periodically (keep last 24 hours)
 function cleanupProcessedEvents() {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000
@@ -20,6 +40,11 @@ function cleanupProcessedEvents() {
   for (const [key, timestamp] of emailsSentForEvents.entries()) {
     if (timestamp < cutoff) {
       emailsSentForEvents.delete(key)
+    }
+  }
+  for (const [key, data] of eventCache.entries()) {
+    if (data.timestamp < cutoff) {
+      eventCache.delete(key)
     }
   }
 }
@@ -217,10 +242,89 @@ async function processNotification(notification: GraphNotification) {
 
   console.log(`[WEBHOOK] Processing event ${eventId} for user ${roomEmail}`)
 
-  // Skip deleted events
+  // Handle deleted events - this is how rooms decline meetings (they delete the event)
   if (notification.changeType === "deleted") {
-    console.log(`[WEBHOOK] Event deleted: ${eventId} in room ${roomEmail}, skipping`)
-    return
+    console.log(`[WEBHOOK] Event deleted: ${eventId} in room ${roomEmail}`)
+
+    // Check if we have cached data for this event (means it was a decline, not a cancellation)
+    const cachedEvent = eventCache.get(eventId)
+    if (cachedEvent) {
+      console.log(`[WEBHOOK] Found cached event data - this was a declined meeting`)
+      console.log(`[WEBHOOK] Cached event: ${cachedEvent.subject} by ${cachedEvent.organizerName}`)
+
+      // Check if we already sent an email for this event
+      if (emailsSentForEvents.has(eventId)) {
+        console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
+        eventCache.delete(eventId)
+        return
+      }
+
+      // Check global settings for decline notifications
+      let sendDeclineNotifications = true
+      try {
+        const supabase = createAdminClient()
+        if (supabase) {
+          const { data: globalSettings } = await supabase
+            .from("global_notification_settings")
+            .select("setting_key, setting_value")
+
+          if (globalSettings) {
+            for (const setting of globalSettings) {
+              if (setting.setting_key === "send_decline_notifications" && setting.setting_value?.enabled !== undefined) {
+                sendDeclineNotifications = setting.setting_value.enabled
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.log(`[WEBHOOK] Error checking settings:`, e)
+      }
+
+      if (!sendDeclineNotifications) {
+        console.log(`[WEBHOOK] Decline notifications disabled, skipping`)
+        eventCache.delete(eventId)
+        return
+      }
+
+      // Send decline notification
+      console.log(`[WEBHOOK] Sending decline notification for deleted/declined event`)
+      try {
+        const htmlContent = renderDeclinedEmail({
+          organizerName: cachedEvent.organizerName,
+          organizerEmail: cachedEvent.organizerEmail,
+          roomName: cachedEvent.roomName,
+          subject: cachedEvent.subject,
+          startTime: cachedEvent.startDateTime,
+          endTime: cachedEvent.endDateTime,
+          timeZone: cachedEvent.timeZone,
+          reason: "The room declined your booking request due to a scheduling conflict.",
+          attendees: cachedEvent.attendees,
+          isSeries: cachedEvent.isSeries,
+          recurrencePattern: cachedEvent.recurrencePattern,
+          seriesStartDate: cachedEvent.seriesStartDate,
+          seriesEndDate: cachedEvent.seriesEndDate,
+        })
+
+        await sendEmail({
+          to: cachedEvent.organizerEmail,
+          subject: `Declined: ${cachedEvent.subject}`,
+          body: htmlContent,
+          saveToSentItems: true,
+        })
+
+        console.log(`[WEBHOOK] Decline email sent successfully to ${cachedEvent.organizerEmail}`)
+        emailsSentForEvents.set(eventId, Date.now())
+      } catch (emailError) {
+        console.error(`[WEBHOOK] Failed to send decline email:`, emailError)
+      }
+
+      // Clean up cache
+      eventCache.delete(eventId)
+      return
+    } else {
+      console.log(`[WEBHOOK] No cached data for deleted event - was likely a cancellation by organizer`)
+      return
+    }
   }
 
   // Check if custom notifications are enabled
@@ -346,6 +450,45 @@ async function processNotification(notification: GraphNotification) {
   console.log(`[WEBHOOK] sendAcceptanceNotifications: ${sendAcceptanceNotifications}`)
   console.log(`[WEBHOOK] sendDeclineNotifications: ${sendDeclineNotifications}`)
 
+  // Cache event data for potential decline handling (when room deletes the event)
+  // This is needed because when a room declines, it DELETES the event rather than updating responseStatus
+  if (responseStatus === "notResponded" || responseStatus === "none" || !responseStatus) {
+    console.log(`[WEBHOOK] Caching event data for potential decline handling`)
+
+    // Get organizer timezone for proper time formatting
+    let organizerTimezone = "America/New_York"
+    try {
+      organizerTimezone = await getUserTimezone(organizerEmail) || "America/New_York"
+    } catch (e) {
+      console.log(`[WEBHOOK] Could not get organizer timezone, using default`)
+    }
+
+    // Get series data if applicable
+    const seriesData = await getSeriesDataAsync(roomEvent, roomEmail)
+
+    eventCache.set(eventId, {
+      eventId,
+      roomEmail,
+      roomName,
+      organizerEmail,
+      organizerName: event.organizer.emailAddress.name,
+      subject: event.subject,
+      startDateTime: event.start.dateTime,
+      endDateTime: event.end.dateTime,
+      timeZone: organizerTimezone,
+      isSeries: seriesData.isSeries,
+      recurrencePattern: seriesData.recurrencePattern,
+      seriesStartDate: seriesData.seriesStartDate,
+      seriesEndDate: seriesData.seriesEndDate,
+      attendees: event.attendees?.map((a: { emailAddress: { name: string; address: string } }) => ({
+        name: a.emailAddress.name,
+        email: a.emailAddress.address,
+      })),
+      timestamp: Date.now(),
+    })
+    console.log(`[WEBHOOK] Event cached: ${eventId}`)
+  }
+
   // Check if the event is canceled - skip sending confirmation emails for canceled events
   // Microsoft sends "updated" notifications when events are canceled, not "deleted"
   // The event may have isCancelled=true or the subject may start with "Canceled:"
@@ -389,6 +532,12 @@ async function processNotification(notification: GraphNotification) {
       if (emailsSentForEvents.has(eventId)) {
         console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
         return
+      }
+
+      // Clear event cache since it was accepted (not declined)
+      if (eventCache.has(eventId)) {
+        console.log(`[WEBHOOK] Clearing event cache for accepted event ${eventId}`)
+        eventCache.delete(eventId)
       }
 
       // Process as accepted
@@ -567,8 +716,12 @@ async function processNotification(notification: GraphNotification) {
       // Process as declined
       if (!sendDeclineNotifications) {
         console.log(`[WEBHOOK] Decline notifications disabled, skipping`)
+        eventCache.delete(eventId)
         return
       }
+
+      // Clear event cache since we're handling the decline now
+      eventCache.delete(eventId)
 
       console.log(`[WEBHOOK] Event DECLINED after retry - sending notification`)
       const retryDeclineTimezone = await getUserTimezone(organizerEmail)
@@ -613,6 +766,12 @@ async function processNotification(notification: GraphNotification) {
     if (emailsSentForEvents.has(eventId)) {
       console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
       return
+    }
+
+    // Clear event cache since it was accepted (not declined)
+    if (eventCache.has(eventId)) {
+      console.log(`[WEBHOOK] Clearing event cache for accepted event ${eventId}`)
+      eventCache.delete(eventId)
     }
 
     if (!sendAcceptanceNotifications) {
