@@ -472,9 +472,7 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
   <tr>
   <td style="vertical-align: top;">
   <p style="margin: 0;">
-  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">RECURRING</span>
-  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 4px;">MEETING</span>
-  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 4px;">SERIES</span>
+  <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recurring Meeting Series</span>
   </p>
   <p style="margin: 8px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.recurrencePattern}</p>
   ${seriesDateRange ? `<p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">${seriesDateRange}</p>` : ""}
@@ -677,12 +675,10 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
     `).join("")
   }
 
-  // Series badge section
+  // Series badge section - single consolidated badge
   const seriesBadges = data.isSeries ? `
     <div style="margin: 16px 0;">
-      <span style="display: inline-block; background-color: #425cc7; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Recurring</span>
-      <span style="display: inline-block; background-color: #425cc7; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Meeting</span>
-      <span style="display: inline-block; background-color: #425cc7; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Series</span>
+      <span style="display: inline-block; background-color: #425cc7; color: #ffffff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recurring Meeting Series</span>
     </div>
   ` : ""
 

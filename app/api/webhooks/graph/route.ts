@@ -305,12 +305,12 @@ async function processNotification(notification: GraphNotification) {
           seriesEndDate: cachedEvent.seriesEndDate,
         })
 
-        await sendEmail({
-          to: cachedEvent.organizerEmail,
-          subject: `Declined: ${cachedEvent.subject}`,
-          body: htmlContent,
-          saveToSentItems: true,
-        })
+        await sendEmail(
+          cachedEvent.roomEmail,
+          cachedEvent.organizerEmail,
+          `Declined: ${cachedEvent.subject}`,
+          htmlContent
+        )
 
         console.log(`[WEBHOOK] Decline email sent successfully to ${cachedEvent.organizerEmail}`)
         emailsSentForEvents.set(eventId, Date.now())
