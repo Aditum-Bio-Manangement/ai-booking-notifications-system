@@ -184,7 +184,10 @@ export async function POST(request: NextRequest) {
 }
 
 async function processNotification(notification: GraphNotification) {
+  console.log("[WEBHOOK] ====== NEW NOTIFICATION RECEIVED ======")
   console.log("[WEBHOOK] Processing notification:", JSON.stringify(notification, null, 2))
+  console.log("[WEBHOOK] Change type:", notification.changeType)
+  console.log("[WEBHOOK] Resource:", notification.resource)
 
   // Extract room email from resource path
   // Format: /users/{email}/events/{eventId}
@@ -340,6 +343,8 @@ async function processNotification(notification: GraphNotification) {
   console.log(`[WEBHOOK] Room: ${roomName}`)
   console.log(`[WEBHOOK] Subject: ${event.subject}`)
   console.log(`[WEBHOOK] isCancelled: ${event.isCancelled}`)
+  console.log(`[WEBHOOK] sendAcceptanceNotifications: ${sendAcceptanceNotifications}`)
+  console.log(`[WEBHOOK] sendDeclineNotifications: ${sendDeclineNotifications}`)
 
   // Check if the event is canceled - skip sending confirmation emails for canceled events
   // Microsoft sends "updated" notifications when events are canceled, not "deleted"
@@ -785,11 +790,13 @@ async function processNotification(notification: GraphNotification) {
       console.error(`[WEBHOOK] Error details:`, JSON.stringify(emailError, Object.getOwnPropertyNames(emailError)))
     }
   } else if (responseStatus === "declined") {
+    console.log(`[WEBHOOK] ====== DECLINED PATH ENTERED ======`)
     // Check if we already sent an email for this event
     if (emailsSentForEvents.has(eventId)) {
       console.log(`[WEBHOOK] Already sent email for event ${eventId}, skipping duplicate`)
       return
     }
+    console.log(`[WEBHOOK] Event not in emailsSentForEvents, checking if decline notifications are enabled`)
 
     if (!sendDeclineNotifications) {
       console.log(`[WEBHOOK] Event DECLINED but decline notifications are disabled, skipping`)
