@@ -86,8 +86,8 @@ export const defaultTemplates = {
                     <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Meeting</p>
-                          <p style="margin: 4px 0 0; color: #425cc7; font-size: 18px; font-weight: 600;">{{subject}}</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Meeting</p>
+                          <p style="margin: 4px 0 0; color: #425cc7; font-size: 16px; font-weight: 600;">{{subject}}</p>
                         </td>
                       </tr>
                       <tr>
@@ -95,11 +95,11 @@ export const defaultTemplates = {
                           <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                             <tr>
                               <td width="50%" style="vertical-align: top;">
-                                <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Room</p>
+                                <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Room</p>
                                 <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{roomName}}</p>
                               </td>
                               <td width="50%" style="vertical-align: top;">
-                                <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Date</p>
+                                <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Date</p>
                                 <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{date}}</p>
                               </td>
                             </tr>
@@ -108,14 +108,14 @@ export const defaultTemplates = {
                       </tr>
                       <tr>
                         <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Time</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Time</p>
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
                         </td>
                       </tr>
                       {{seriesSection}}
                       <tr>
                         <td style="padding-top: 16px;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Organizer</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Organizer</p>
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{organizerName}}</p>
                           {{attendeesSection}}
                         </td>
@@ -219,8 +219,8 @@ export const defaultTemplates = {
                     <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Requested Meeting</p>
-                          <p style="margin: 4px 0 0; color: #19226d; font-size: 18px; font-weight: 600;">{{subject}}</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Requested Meeting</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 600;">{{subject}}</p>
                         </td>
                       </tr>
                       <tr>
@@ -228,11 +228,11 @@ export const defaultTemplates = {
                           <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                             <tr>
                               <td width="50%" style="vertical-align: top;">
-                                <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Room</p>
+                                <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Room</p>
                                 <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{roomName}}</p>
                               </td>
                               <td width="50%" style="vertical-align: top;">
-                                <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Date</p>
+                                <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Date</p>
                                 <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{date}}</p>
                               </td>
                             </tr>
@@ -241,14 +241,14 @@ export const defaultTemplates = {
                       </tr>
                       <tr>
                         <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Time</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Time</p>
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{startTime}} - {{endTime}} ({{timeZone}})</p>
                         </td>
                       </tr>
                       {{seriesSection}}
                       <tr>
                         <td style="padding-top: 16px;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Organizer</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Organizer</p>
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{organizerName}}</p>
                           {{attendeesSection}}
                         </td>
@@ -586,7 +586,7 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #fef2f2; border-radius: 8px; border: 1px solid #fecaca; margin-bottom: 24px;">
                 <tr>
                   <td style="padding: 16px;">
-                    <p style="margin: 0 0 12px; color: #991b1b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                    <p style="margin: 0 0 12px; color: #991b1b; font-size: 16px; font-weight: 600;">
                       Unavailable Dates
                     </p>
                     <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
@@ -603,25 +603,25 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
                     <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-                            <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 8px;">SERIES</span>
-                            Meeting
+                          <p style="margin: 0;">
+                            <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recurring Meeting Series</span>
                           </p>
-                          <p style="margin: 4px 0 0; color: #425cc7; font-size: 18px; font-weight: 600;">${data.subject}</p>
+                          <p style="margin: 8px 0 0; color: #64748b; font-size: 16px; font-weight: 600;">Meeting</p>
+                          <p style="margin: 4px 0 0; color: #425cc7; font-size: 16px; font-weight: 600;">${data.subject}</p>
                         </td>
                       </tr>
                       <tr>
                         <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Room</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Room</p>
                           <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.roomName}</p>
                         </td>
                       </tr>
                       <tr>
                         <td style="padding-top: 16px;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Series Details</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Series Details</p>
                           ${seriesInfo}
                           ${seriesDateRange}
-                          <p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">Time: ${data.startTime} - ${data.endTime} (${timezoneDisplay})</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">Time: ${data.startTime} - ${data.endTime} (${timezoneDisplay})</p>
                         </td>
                       </tr>
                     </table>
@@ -665,11 +665,11 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
     conflictListHtml = data.conflictDates.map(conflict => `
       <tr>
         <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
-          <span style="color: #dc2626; font-weight: 500;">${conflict.organizerName || data.organizerName}</span>
-          <span style="color: #64748b;"> - </span>
-          <span style="color: #c2410c;">${conflict.date} ${conflict.startTime}</span>
-          <span style="color: #64748b;"> to </span>
-          <span style="color: #c2410c;">${conflict.date} ${conflict.endTime}</span>
+          <span style="color: #19226d; font-size: 16px; font-weight: 500;">${conflict.organizerName || data.organizerName}</span>
+          <span style="color: #64748b; font-size: 16px;"> - </span>
+          <span style="color: #19226d; font-size: 16px; font-weight: 500;">${conflict.date} ${conflict.startTime}</span>
+          <span style="color: #64748b; font-size: 16px;"> to </span>
+          <span style="color: #19226d; font-size: 16px; font-weight: 500;">${conflict.date} ${conflict.endTime}</span>
         </td>
       </tr>
     `).join("")
@@ -757,8 +757,8 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                       <!-- Meeting Title -->
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
-                          <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Declined Instances</p>
-                          <p style="margin: 4px 0 0; color: #19226d; font-size: 18px; font-weight: 600;">${data.subject}</p>
+                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Declined Instances</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 600;">${data.subject}</p>
                         </td>
                       </tr>
                       
@@ -768,25 +768,31 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                           <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                             <tr>
                               <td width="50%">
-                                <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Room</p>
+                                <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Room</p>
                                 <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.roomName}</p>
                               </td>
                               <td width="50%">
-                                <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Time Zone</p>
-                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px;">${timezoneDisplay}</p>
+                                <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Time Zone</p>
+                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${timezoneDisplay}</p>
                               </td>
                             </tr>
                           </table>
                         </td>
                       </tr>
                       
-                      <!-- Conflicts List Header -->
+                      <!-- Conflicts List Header - Red Banner -->
                       <tr>
-                        <td style="padding: 16px 0 8px 0;">
-                          <p style="margin: 0; color: #dc2626; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
-                            The conflicts are:
-                          </p>
-                          <p style="margin: 8px 0 0; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <td style="padding: 16px 0 12px 0;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" style="background-color: #b91c1c; border-radius: 6px;">
+                            <tr>
+                              <td style="padding: 8px 16px;">
+                                <p style="margin: 0; color: #ffffff; font-size: 16px; font-weight: 600;">
+                                  The conflicts are:
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
+                          <p style="margin: 12px 0 0; color: #64748b; font-size: 16px; font-weight: 600;">
                             Organizer and Time of Conflicting Meeting
                           </p>
                         </td>
