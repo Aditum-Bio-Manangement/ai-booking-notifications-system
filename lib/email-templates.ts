@@ -51,7 +51,7 @@ export const defaultTemplates = {
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 16px;" valign="middle">
+                  <td style="vertical-align: middle; padding-left: 16px; text-align: center;" valign="middle" align="center">
                     <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
                   </td>
                 </tr>
@@ -164,7 +164,7 @@ export const defaultTemplates = {
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 16px;" valign="middle">
+                  <td style="vertical-align: middle; padding-left: 16px; text-align: center;" valign="middle" align="center">
                     <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
                 </tr>
@@ -327,14 +327,18 @@ function formatDateTime(isoString: string, timeZone: string) {
 
     const date = new Date(dateStr)
 
-    // Format in the organizer's timezone
-    const dateOptions: Intl.DateTimeFormatOptions = {
+    // Format weekday on its own line, then abbreviated month date below it
+    const weekday = date.toLocaleDateString("en-US", {
       weekday: "long",
+      timeZone: ianaTimezone,
+    })
+
+    const shortDate = date.toLocaleDateString("en-US", {
       year: "numeric",
-      month: "long",
+      month: "short",
       day: "numeric",
       timeZone: ianaTimezone,
-    }
+    })
 
     const timeOptions: Intl.DateTimeFormatOptions = {
       hour: "numeric",
@@ -343,23 +347,31 @@ function formatDateTime(isoString: string, timeZone: string) {
       timeZone: ianaTimezone,
     }
 
-    const formattedDate = date.toLocaleDateString("en-US", dateOptions)
     const formattedTime = date.toLocaleTimeString("en-US", timeOptions)
 
-
-
     return {
-      date: formattedDate,
+      // weekday on line 1, abbreviated date on line 2
+      date: `${weekday}<br>${shortDate}`,
       time: formattedTime,
     }
   } catch (error) {
     console.error(`[EMAIL] Error formatting datetime:`, error)
     // Fall back to date-fns formatting
     return {
-      date: format(new Date(isoString), "EEEE, MMMM d, yyyy"),
+      date: `${format(new Date(isoString), "EEEE")}<br>${format(new Date(isoString), "MMM d, yyyy")}`,
       time: format(new Date(isoString), "h:mm a"),
     }
   }
+}
+
+// Remove appended meeting links (Zoom/Teams/etc.) from a location/room string
+function cleanLocationName(name: string): string {
+  if (!name) return name
+  // Locations often come as "Room Name; https://zoom.us/..." - take the part before the link
+  let cleaned = name.split(/;?\s*https?:\/\//i)[0]
+  // Also strip a trailing semicolon and whitespace
+  cleaned = cleaned.replace(/;\s*$/, "").trim()
+  return cleaned || name
 }
 
 // Get a friendly timezone display name
@@ -389,6 +401,9 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
 
   const logoUrl = data.logoUrl || process.env.LOGO_URL || "https://ai-booking-notifications-system.onrender.com/images/aditum-logo-horizontal.png"
   const timezoneDisplay = getTimezoneDisplayName(data.timeZone)
+
+  // Strip any appended meeting links (e.g. Zoom/Teams URLs) from the room name
+  const cleanRoomName = cleanLocationName(data.roomName)
 
   // Generate attendees section HTML if attendees exist
   let attendeesSection = ""
@@ -467,7 +482,7 @@ function replaceTemplateVariables(template: string, data: EmailTemplateData): st
 
   return template
     .replace(/\{\{organizerName\}\}/g, data.organizerName)
-    .replace(/\{\{roomName\}\}/g, data.roomName)
+    .replace(/\{\{roomName\}\}/g, cleanRoomName)
     .replace(/\{\{subject\}\}/g, data.subject)
     .replace(/\{\{date\}\}/g, start.date)
     .replace(/\{\{startTime\}\}/g, start.time)
@@ -545,7 +560,7 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 16px;" valign="middle">
+                  <td style="vertical-align: middle; padding-left: 16px; text-align: center;" valign="middle" align="center">
                     <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Series Conflict Notice</h1>
                   </td>
                 </tr>
@@ -595,7 +610,7 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
                       <tr>
                         <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
                           <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Room</p>
-                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.roomName}</p>
+                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${cleanLocationName(data.roomName)}</p>
                         </td>
                       </tr>
                       <tr>
@@ -751,7 +766,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                             <tr>
                               <td width="50%">
                                 <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Room</p>
-                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.roomName}</p>
+                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${cleanLocationName(data.roomName)}</p>
                               </td>
                               <td width="50%">
                                 <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Time Zone</p>
