@@ -664,11 +664,11 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
     conflictListHtml = data.conflictDates.map(conflict => `
       <tr>
         <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
-          <span style="color: #19226d; font-size: 16px; font-weight: 500;">${conflict.organizerName || data.organizerName}</span>
-          <span style="color: #64748b; font-size: 16px;"> - </span>
-          <span style="color: #19226d; font-size: 16px; font-weight: 500;">${conflict.date} ${conflict.startTime}</span>
-          <span style="color: #64748b; font-size: 16px;"> to </span>
-          <span style="color: #19226d; font-size: 16px; font-weight: 500;">${conflict.date} ${conflict.endTime}</span>
+          <span style="color: #334155; font-size: 15px; font-weight: 500;">${conflict.organizerName || data.organizerName}</span>
+          <span style="color: #64748b; font-size: 15px;"> - </span>
+          <span style="color: #334155; font-size: 15px; font-weight: 500;">${conflict.date} ${conflict.startTime}</span>
+          <span style="color: #64748b; font-size: 15px;"> to </span>
+          <span style="color: #334155; font-size: 15px; font-weight: 500;">${conflict.date} ${conflict.endTime}</span>
         </td>
       </tr>
     `).join("")
@@ -685,9 +685,9 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
     <tr>
       <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
         ${seriesBadges}
-        <p style="margin: 0; color: #19226d; font-size: 16px; font-weight: 500;">${data.recurrencePattern}</p>
+        <p style="margin: 0; color: #334155; font-size: 15px; font-weight: 500;">${data.recurrencePattern}</p>
         ${data.seriesStartDate && data.seriesEndDate
-      ? `<p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">${data.seriesStartDate} - ${data.seriesEndDate}</p>`
+      ? `<p style="margin: 4px 0 0; color: #64748b; font-size: 13px;">${data.seriesStartDate} - ${data.seriesEndDate}</p>`
       : ""}
       </td>
     </tr>
@@ -712,15 +712,16 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background-color: #b91c1c; padding: 24px 32px;">
+            <td style="background-color: #b91c1c; padding: 20px 24px;" bgcolor="#b91c1c">
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                 <tr>
-                  <td style="vertical-align: middle;" valign="middle" width="120">
-                    <img src="${logoUrl}" alt="Aditum Bio" style="height: 60px; display: block;" height="60">
+                  <td style="vertical-align: middle;" valign="middle" width="100">
+                    <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 20px;" valign="middle">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600;">Room Unavailable</h1>
+                  <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
+                  <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
               </table>
             </td>
@@ -729,11 +730,11 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
           <!-- Content -->
           <tr>
             <td style="padding: 24px 20px;">
-              <p style="margin: 0 0 16px; color: #19226d; font-size: 16px; line-height: 1.6;">
+              <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.6;">
                 Hi ${data.organizerName},
               </p>
               
-              <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
+              <p style="margin: 0 0 24px; color: #334155; font-size: 15px; line-height: 1.6;">
                 Unfortunately, your room booking request could not be confirmed.
               </p>
               
@@ -741,7 +742,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #fef2f2; border-radius: 8px; border: 1px solid #fecaca; margin-bottom: 24px;">
                 <tr>
                   <td style="padding: 16px 24px;">
-                    <p style="margin: 0; color: #991b1b; font-size: 14px; font-weight: 500;">
+                    <p style="margin: 0; color: #991b1b; font-size: 15px; font-weight: 500;">
                       <strong>Reason:</strong> ${reasonText}
                     </p>
                   </td>
@@ -756,8 +757,8 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                       <!-- Meeting Title -->
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
-                          <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Declined Instances</p>
-                          <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 600;">${data.subject}</p>
+                          <p style="margin: 0; color: #64748b; font-size: 13px; font-weight: 600;">Declined Instances</p>
+                          <p style="margin: 4px 0 0; color: #334155; font-size: 15px; font-weight: 600;">${data.subject}</p>
                         </td>
                       </tr>
                       
@@ -767,31 +768,25 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                           <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                             <tr>
                               <td width="50%">
-                                <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Room</p>
-                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${cleanLocationName(data.roomName)}</p>
+                                <p style="margin: 0; color: #64748b; font-size: 13px; font-weight: 600;">Room</p>
+                                <p style="margin: 4px 0 0; color: #334155; font-size: 15px; font-weight: 500;">${cleanLocationName(data.roomName)}</p>
                               </td>
                               <td width="50%">
-                                <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Time Zone</p>
-                                <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">${timezoneDisplay}</p>
+                                <p style="margin: 0; color: #64748b; font-size: 13px; font-weight: 600;">Time Zone</p>
+                                <p style="margin: 4px 0 0; color: #334155; font-size: 15px; font-weight: 500;">${timezoneDisplay}</p>
                               </td>
                             </tr>
                           </table>
                         </td>
                       </tr>
                       
-                      <!-- Conflicts List Header - Red Banner -->
+                      <!-- Conflicts List Header - Red Badge Pill -->
                       <tr>
                         <td style="padding: 16px 0 12px 0;">
-                          <table role="presentation" cellspacing="0" cellpadding="0" style="background-color: #b91c1c; border-radius: 6px;">
-                            <tr>
-                              <td style="padding: 8px 16px;">
-                                <p style="margin: 0; color: #ffffff; font-size: 16px; font-weight: 600;">
-                                  The conflicts are:
-                                </p>
-                              </td>
-                            </tr>
-                          </table>
-                          <p style="margin: 12px 0 0; color: #64748b; font-size: 16px; font-weight: 600;">
+                          <p style="margin: 0;">
+                            <span style="display: inline-block; background-color: #b91c1c; color: #ffffff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">The Conflicts Are</span>
+                          </p>
+                          <p style="margin: 12px 0 0; color: #64748b; font-size: 15px; font-weight: 600;">
                             Organizer and Time of Conflicting Meeting
                           </p>
                         </td>
@@ -816,8 +811,8 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe;">
                 <tr>
                   <td style="padding: 20px;">
-                    <p style="margin: 0 0 12px; color: #1e40af; font-size: 14px; font-weight: 600;">What you can do:</p>
-                    <ul style="margin: 0; padding-left: 20px; color: #1e40af; font-size: 14px; line-height: 1.8;">
+                    <p style="margin: 0 0 12px; color: #1e40af; font-size: 15px; font-weight: 600;">What you can do:</p>
+                    <ul style="margin: 0; padding-left: 20px; color: #1e40af; font-size: 15px; line-height: 1.8;">
                       <li>Check for available time slots in Outlook</li>
                       <li>Try booking a different room</li>
                       <li>Contact the current room holder to negotiate</li>
