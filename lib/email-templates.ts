@@ -51,9 +51,10 @@ export const defaultTemplates = {
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 16px; text-align: center;" valign="middle" align="center">
+                  <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
                     <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
                   </td>
+                  <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
               </table>
             </td>
@@ -164,9 +165,10 @@ export const defaultTemplates = {
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 16px; text-align: center;" valign="middle" align="center">
+                  <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
                     <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
+                  <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
               </table>
             </td>
