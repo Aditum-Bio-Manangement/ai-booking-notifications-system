@@ -45,32 +45,23 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #425cc7 0%, #19d3c5 100%); padding: 24px 32px;" bgcolor="#425cc7">
-              <!--[if mso]>
-              <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;">
-              <v:fill type="gradient" color="#19d3c5" color2="#425cc7" angle="135"/>
-              <v:textbox inset="0,0,0,0">
-              <![endif]-->
+            <td style="background-color: #425cc7; padding: 20px 24px;" bgcolor="#425cc7">
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                 <tr>
-                  <td style="vertical-align: middle;" valign="middle" width="120">
-                    <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 60px; display: block;" height="60">
+                  <td style="vertical-align: middle;" valign="middle" width="100">
+                    <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 20px;" valign="middle">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Room Booking Confirmed</h1>
+                  <td style="vertical-align: middle; padding-left: 16px;" valign="middle">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
                   </td>
                 </tr>
               </table>
-              <!--[if mso]>
-              </v:textbox>
-              </v:rect>
-              <![endif]-->
             </td>
           </tr>
           
           <!-- Content -->
           <tr>
-            <td style="padding: 32px;">
+            <td style="padding: 24px 20px;">
               <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
                 Hi {{organizerName}},
               </p>
@@ -82,7 +73,7 @@ export const defaultTemplates = {
               <!-- Booking Details Card -->
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
                 <tr>
-                  <td style="padding: 24px;">
+                  <td style="padding: 20px 16px;">
                     <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
@@ -167,32 +158,23 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%); padding: 24px 32px;" bgcolor="#7f1d1d">
-              <!--[if mso]>
-              <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;">
-              <v:fill type="gradient" color="#dc2626" color2="#7f1d1d" angle="135"/>
-              <v:textbox inset="0,0,0,0">
-              <![endif]-->
+            <td style="background-color: #b91c1c; padding: 20px 24px;" bgcolor="#b91c1c">
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                 <tr>
-                  <td style="vertical-align: middle;" valign="middle" width="120">
-                    <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 60px; display: block;" height="60">
+                  <td style="vertical-align: middle;" valign="middle" width="100">
+                    <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 20px;" valign="middle">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Room Unavailable</h1>
+                  <td style="vertical-align: middle; padding-left: 16px;" valign="middle">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
                 </tr>
               </table>
-              <!--[if mso]>
-              </v:textbox>
-              </v:rect>
-              <![endif]-->
             </td>
           </tr>
           
           <!-- Content -->
           <tr>
-            <td style="padding: 32px;">
+            <td style="padding: 24px 20px;">
               <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
                 Hi {{organizerName}},
               </p>
@@ -215,7 +197,7 @@ export const defaultTemplates = {
               <!-- Booking Details Card -->
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; margin-top: 24px;">
                 <tr>
-                  <td style="padding: 24px;">
+                  <td style="padding: 20px 16px;">
                     <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
@@ -557,14 +539,14 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #dc2626 0%, #f59e0b 100%); padding: 24px 32px;" bgcolor="#dc2626">
+            <td style="background-color: #b91c1c; padding: 20px 24px;" bgcolor="#b91c1c">
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                 <tr>
-                  <td style="vertical-align: middle;" valign="middle" width="120">
-                    <img src="${logoUrl}" alt="Aditum Bio" style="height: 60px; display: block;" height="60">
+                  <td style="vertical-align: middle;" valign="middle" width="100">
+                    <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 20px;" valign="middle">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600;">Series Conflict Notice</h1>
+                  <td style="vertical-align: middle; padding-left: 16px;" valign="middle">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Series Conflict Notice</h1>
                   </td>
                 </tr>
               </table>
@@ -573,7 +555,7 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
           
           <!-- Content -->
           <tr>
-            <td style="padding: 32px;">
+            <td style="padding: 24px 20px;">
               <p style="margin: 0 0 24px; color: #19226d; font-size: 16px; line-height: 1.6;">
                 Hi ${data.organizerName},
               </p>
@@ -599,7 +581,7 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
               <!-- Meeting Details Card -->
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
                 <tr>
-                  <td style="padding: 24px;">
+                  <td style="padding: 20px 16px;">
                     <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                       <tr>
                         <td style="padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
@@ -729,7 +711,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
           
           <!-- Content -->
           <tr>
-            <td style="padding: 32px;">
+            <td style="padding: 24px 20px;">
               <p style="margin: 0 0 16px; color: #19226d; font-size: 16px; line-height: 1.6;">
                 Hi ${data.organizerName},
               </p>
@@ -752,7 +734,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
               <!-- Conflicts Card - Main card showing all conflicts -->
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 24px;">
                 <tr>
-                  <td style="padding: 24px;">
+                  <td style="padding: 20px 16px;">
                     <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                       <!-- Meeting Title -->
                       <tr>
