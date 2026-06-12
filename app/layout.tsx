@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description: 'AI-Enhanced Booking Notification Admin Dashboard for Cambridge and Oakland offices',
   generator: 'Created by Aditum Bio',
   icons: {
-    icon: '/images/aditum-logo-stacked.png',
+    icon: '/images/favicon.ico',
     apple: '/images/aditum-logo-stacked.png',
   },
 }
