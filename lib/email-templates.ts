@@ -45,14 +45,14 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background-color: #425cc7; padding: 20px 24px;" bgcolor="#425cc7">
+            <td style="background-color: #ffffff; padding: 20px 24px; border-bottom: 1px solid #e2e8f0;" bgcolor="#ffffff">
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                 <tr>
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
+                    <h1 style="margin: 0; color: #425cc7; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
@@ -159,14 +159,14 @@ export const defaultTemplates = {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background-color: #b91c1c; padding: 20px 24px;" bgcolor="#b91c1c">
+            <td style="background-color: #ffffff; padding: 20px 24px; border-bottom: 1px solid #e2e8f0;" bgcolor="#ffffff">
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                 <tr>
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
@@ -556,14 +556,14 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background-color: #b91c1c; padding: 20px 24px;" bgcolor="#b91c1c">
+            <td style="background-color: #ffffff; padding: 20px 24px; border-bottom: 1px solid #e2e8f0;" bgcolor="#ffffff">
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                 <tr>
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
-                  <td style="vertical-align: middle; padding-left: 16px; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Series Conflict Notice</h1>
+                  <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 22px; font-weight: 600; white-space: nowrap;">Series Conflict Notice</h1>
                   </td>
                 </tr>
               </table>
@@ -712,14 +712,14 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
         <table role="presentation" cellspacing="0" cellpadding="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
           <!-- Header -->
           <tr>
-            <td style="background-color: #b91c1c; padding: 20px 24px;" bgcolor="#b91c1c">
+            <td style="background-color: #ffffff; padding: 20px 24px; border-bottom: 1px solid #e2e8f0;" bgcolor="#ffffff">
               <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                 <tr>
                   <td style="vertical-align: middle;" valign="middle" width="100">
                     <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
