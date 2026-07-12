@@ -211,11 +211,11 @@ export const defaultTemplates = {
                         <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
                           <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                             <tr>
-                              <td width="50%" style="vertical-align: top;">
+                              <td width="65%" style="vertical-align: top;">
                                 <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Room</p>
                                 <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{roomName}}</p>
                               </td>
-                              <td width="50%" style="vertical-align: top;">
+                              <td width="35%" style="vertical-align: top;">
                                 <p style="margin: 0; color: #64748b; font-size: 16px; font-weight: 600;">Date</p>
                                 <p style="margin: 4px 0 0; color: #19226d; font-size: 16px; font-weight: 500;">{{date}}</p>
                               </td>
