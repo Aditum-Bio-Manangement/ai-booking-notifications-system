@@ -52,7 +52,7 @@ export const defaultTemplates = {
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #425cc7; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
+                    <h1 style="margin: 0; color: #425cc7; font-size: 18px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
@@ -166,7 +166,7 @@ export const defaultTemplates = {
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #b91c1c; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 18px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
@@ -563,7 +563,7 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
                     <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #b91c1c; font-size: 22px; font-weight: 600; white-space: nowrap;">Series Conflict Notice</h1>
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 18px; font-weight: 600; white-space: nowrap;">Series Conflict Notice</h1>
                   </td>
                 </tr>
               </table>
@@ -677,7 +677,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
   // Series badge section - single consolidated badge
   const seriesBadges = data.isSeries ? `
     <div style="margin: 16px 0;">
-      <span style="display: inline-block; background-color: #425cc7; color: #ffffff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recurring Meeting Series</span>
+      <span style="display: inline-block; color: #425cc7; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recurring Meeting Series</span>
     </div>
   ` : ""
 
@@ -719,7 +719,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                     <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #b91c1c; font-size: 22px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 18px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
@@ -767,13 +767,9 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                         <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
                           <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
                             <tr>
-                              <td width="50%">
+                              <td width="70%">
                                 <p style="margin: 0; color: #64748b; font-size: 13px; font-weight: 600;">Room</p>
                                 <p style="margin: 4px 0 0; color: #334155; font-size: 15px; font-weight: 500;">${cleanLocationName(data.roomName)}</p>
-                              </td>
-                              <td width="50%">
-                                <p style="margin: 0; color: #64748b; font-size: 13px; font-weight: 600;">Time Zone</p>
-                                <p style="margin: 4px 0 0; color: #334155; font-size: 15px; font-weight: 500;">${timezoneDisplay}</p>
                               </td>
                             </tr>
                           </table>
@@ -784,7 +780,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                       <tr>
                         <td style="padding: 16px 0 12px 0;">
                           <p style="margin: 0;">
-                            <span style="display: inline-block; background-color: #b91c1c; color: #ffffff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">The Conflicts Are</span>
+                            <span style="display: inline-block; color: #b91c1c; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">The Conflicts Are</span>
                           </p>
                           <p style="margin: 12px 0 0; color: #64748b; font-size: 15px; font-weight: 600;">
                             Organizer and Time of Conflicting Meeting
