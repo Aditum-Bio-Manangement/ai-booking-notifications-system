@@ -242,15 +242,19 @@ export const defaultTemplates = {
                 </tr>
               </table>
               
-              <!-- Suggestions -->
-              <div style="margin-top: 24px; padding: 20px; background-color: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe;">
-                <p style="margin: 0 0 12px; color: #1e40af; font-size: 14px; font-weight: 600;">What you can do:</p>
-                <ul style="margin: 0; padding-left: 20px; color: #1e40af; font-size: 14px; line-height: 1.8;">
-                  <li>Check for available time slots in Outlook</li>
-                  <li>Try booking a different room</li>
-                  <li>Contact the current room holder to negotiate</li>
-                </ul>
-              </div>
+              <!-- What You Can Do Card -->
+              <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <p style="margin: 0 0 12px; color: #1e40af; font-size: 15px; font-weight: 600;">What you can do:</p>
+                    <ul style="margin: 0; padding-left: 20px; color: #1e40af; font-size: 15px; line-height: 1.8;">
+                      <li>Check for available time slots in Outlook</li>
+                      <li>Try booking a different room</li>
+                      <li>Contact the current room holder to negotiate</li>
+                    </ul>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
           
