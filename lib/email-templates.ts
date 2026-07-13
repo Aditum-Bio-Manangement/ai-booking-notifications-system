@@ -52,7 +52,7 @@ export const defaultTemplates = {
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #425cc7; font-size: 18px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
+                    <h1 style="margin: 0; color: #425cc7; font-size: 20px; font-weight: 600; white-space: nowrap;">Room Booking Confirmed</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
@@ -166,7 +166,7 @@ export const defaultTemplates = {
                     <img src="{{logoUrl}}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #b91c1c; font-size: 18px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 20px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
@@ -563,7 +563,7 @@ export function renderSeriesConflictEmail(data: EmailTemplateData): string {
                     <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #b91c1c; font-size: 18px; font-weight: 600; white-space: nowrap;">Series Conflict Notice</h1>
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 20px; font-weight: 600; white-space: nowrap;">Series Conflict Notice</h1>
                   </td>
                 </tr>
               </table>
@@ -719,7 +719,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
                     <img src="${logoUrl}" alt="Aditum Bio" style="height: 48px; display: block;" height="48">
                   </td>
                   <td style="vertical-align: middle; text-align: center;" valign="middle" align="center">
-                    <h1 style="margin: 0; color: #b91c1c; font-size: 18px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
+                    <h1 style="margin: 0; color: #b91c1c; font-size: 20px; font-weight: 600; white-space: nowrap;">Room Unavailable</h1>
                   </td>
                   <td style="vertical-align: middle;" valign="middle" width="100">&nbsp;</td>
                 </tr>
