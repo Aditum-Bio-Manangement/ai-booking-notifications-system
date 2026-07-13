@@ -677,7 +677,7 @@ export function renderSeriesDeclinedEmail(data: EmailTemplateData): string {
   // Series badge section - single consolidated badge
   const seriesBadges = data.isSeries ? `
     <div style="margin: 16px 0;">
-      <span style="display: inline-block; color: #425cc7; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recurring Meeting Series</span>
+      <span style="display: inline-block;  background-color: #dbeafe; color: #425cc7; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recurring Meeting Series</span>
     </div>
   ` : ""
 
